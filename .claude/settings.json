@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun install)",
+      "Bash(bun run dev*)",
+      "Bash(bun run build)",
+      "Bash(bun run lint)",
+      "Bash(bun run typecheck)",
+      "Bash(bun --cwd apps/* *)",
+      "Bash(python3 apps/trading-engine/main.py)",
+      "Bash(python3 -m pip install -r apps/trading-engine/requirements.txt)",
+      "Bash(supabase functions serve*)",
+      "Bash(supabase db*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(find . *)",
+      "Bash(rg *)",
+      "Bash(ls*)",
+      "Bash(wc *)",
+      "Skill(alfa-omega-architecture-reviewer)",
+      "Skill(alfa-omega-code-review)",
+      "Skill(typescript-magician)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -f*)",
+      "Bash(git clean -d*)",
+      "Bash(rm -rf data/local-db.json*)",
+      "Bash(rm -rf .env*)"
+    ],
+    "defaultMode": "auto"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "alfa-omega",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run dev:local",
+    "dev:local": "bun scripts/dev-local.mjs",
+    "dev:local:broker": "bun scripts/dev-local.mjs --broker",
+    "dev:all": "bun run --filter='*' dev",
+    "start:local": "bun run dev:local",
+    "dev:dashboard": "bun --cwd apps/dashboard dev",
+    "dev:api": "bun --cwd apps/api dev",
+    "dev:notification": "bun --cwd apps/notification-worker dev",
+    "dev:broker": "bun --cwd apps/broker-gateway dev",
+    "dev:engine": "python3 apps/trading-engine/main.py",
+    "build": "bun run --filter='*' build",
+    "lint": "bun run --filter='*' lint",
+    "typecheck": "bun run --filter='*' typecheck"
+  }
+}
