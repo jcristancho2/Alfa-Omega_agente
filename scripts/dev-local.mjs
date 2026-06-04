@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { isAbsolute, resolve } from "node:path";
 
 const includeBroker = process.argv.includes("--broker");
 
@@ -13,6 +14,9 @@ const defaults = {
 };
 
 const env = { ...defaults, ...process.env };
+env.LOCAL_DB_PATH = isAbsolute(env.LOCAL_DB_PATH)
+  ? env.LOCAL_DB_PATH
+  : resolve(process.cwd(), env.LOCAL_DB_PATH);
 
 const services = [
   {

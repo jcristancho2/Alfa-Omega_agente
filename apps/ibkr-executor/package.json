@@ -1,5 +1,5 @@
 {
-  "name": "@alfa-omega/api",
+  "name": "@alfa-omega/ibkr-executor",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,12 +7,12 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@alfa-omega/risk-engine": "workspace:*",
     "@alfa-omega/trading-types": "workspace:*",
-    "@supabase/supabase-js": "latest",
     "hono": "latest",
     "zod": "latest"
   },

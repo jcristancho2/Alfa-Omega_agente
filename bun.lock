@@ -9,6 +9,8 @@
       "name": "@alfa-omega/api",
       "version": "0.1.0",
       "dependencies": {
+        "@alfa-omega/risk-engine": "workspace:*",
+        "@alfa-omega/trading-types": "workspace:*",
         "@supabase/supabase-js": "latest",
         "hono": "latest",
         "zod": "latest",
@@ -50,11 +52,36 @@
         "typescript": "^5",
       },
     },
+    "apps/ibkr-executor": {
+      "name": "@alfa-omega/ibkr-executor",
+      "version": "0.1.0",
+      "dependencies": {
+        "@alfa-omega/risk-engine": "workspace:*",
+        "@alfa-omega/trading-types": "workspace:*",
+        "hono": "latest",
+        "zod": "latest",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "latest",
+      },
+    },
     "apps/notification-worker": {
       "name": "@alfa-omega/notification-worker",
       "version": "0.1.0",
       "dependencies": {
         "@supabase/supabase-js": "latest",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "latest",
+      },
+    },
+    "packages/risk-engine": {
+      "name": "@alfa-omega/risk-engine",
+      "version": "0.1.0",
+      "dependencies": {
+        "@alfa-omega/trading-types": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -73,6 +100,13 @@
         "typescript": "latest",
       },
     },
+    "packages/trading-types": {
+      "name": "@alfa-omega/trading-types",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "latest",
+      },
+    },
   },
   "trustedDependencies": [
     "sharp",
@@ -83,9 +117,15 @@
 
     "@alfa-omega/broker-gateway": ["@alfa-omega/broker-gateway@workspace:apps/broker-gateway"],
 
+    "@alfa-omega/ibkr-executor": ["@alfa-omega/ibkr-executor@workspace:apps/ibkr-executor"],
+
     "@alfa-omega/notification-worker": ["@alfa-omega/notification-worker@workspace:apps/notification-worker"],
 
+    "@alfa-omega/risk-engine": ["@alfa-omega/risk-engine@workspace:packages/risk-engine"],
+
     "@alfa-omega/shared": ["@alfa-omega/shared@workspace:packages/shared"],
+
+    "@alfa-omega/trading-types": ["@alfa-omega/trading-types@workspace:packages/trading-types"],
 
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
 

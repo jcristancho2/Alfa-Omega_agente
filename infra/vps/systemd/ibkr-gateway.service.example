@@ -1,0 +1,14 @@
+[Unit]
+Description=IBKR Client Portal Gateway
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ibkr/clientportal.gw
+ExecStart=/opt/ibkr/clientportal.gw/bin/run.sh root/conf.yaml
+Restart=always
+RestartSec=5
+User=atlas
+
+[Install]
+WantedBy=multi-user.target

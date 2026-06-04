@@ -5,11 +5,1979 @@
     "trading_mode": "simulated",
     "capital": 10000,
     "daily_pnl": 0,
-    "updated_at": "2026-06-01T11:48:39Z"
+    "updated_at": "2026-06-04T21:15:48.579Z"
   },
   "signals": [],
   "trades": [],
-  "market_prices": {},
-  "notifications": [],
-  "system_logs": []
+  "market_prices": {
+    "BTCUSDT": 65000
+  },
+  "notifications": [
+    {
+      "id": "9ed32862-e75c-4e01-8882-ae11246e3a21",
+      "channel": "whatsapp",
+      "event_type": "kapso_response",
+      "message": "Estado: paused | modo: simulated | capital: 10000",
+      "status": "pending",
+      "metadata": {
+        "command": "estado"
+      },
+      "created_at": "2026-06-04T21:08:20.304Z"
+    }
+  ],
+  "system_logs": [
+    {
+      "id": "bab699be-d4fc-497a-9d1c-5c9797e700e1",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": true,
+        "orderId": "d2d8d396-ed16-4b0c-b74e-86343347172a",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:34:50.194Z"
+    },
+    {
+      "id": "47838caa-d51b-44c5-93f2-6561ef37f673",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "ok": true,
+          "dryRun": true,
+          "rawResponse": {
+            "accountId": "DUQ583510",
+            "order": {
+              "conid": 265598,
+              "orderType": "LMT",
+              "outsideRTH": false,
+              "price": 100,
+              "quantity": 1,
+              "side": "BUY",
+              "ticker": "AAPL",
+              "tif": "DAY"
+            },
+            "risk": {
+              "metadata": {
+                "notional": 100
+              },
+              "passed": true,
+              "reason": null,
+              "rule": "passed"
+            }
+          },
+          "requiresManualConfirmation": false,
+          "status": "previewed"
+        },
+        "endpoint": "/orders/preview",
+        "isPreview": true,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "d2d8d396-ed16-4b0c-b74e-86343347172a",
+        "status": "previewed",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T20:34:50.206Z"
+    },
+    {
+      "id": "1a7e2407-eb4c-4e84-9566-4137a58cb451",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": false,
+        "orderId": "9fc2322a-a752-4444-98ca-3dc45cec8605",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:35:01.145Z"
+    },
+    {
+      "id": "15072a6e-290b-49d2-801c-10d807cb8926",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "ok": true,
+          "dryRun": true,
+          "rawResponse": {
+            "accountId": "DUQ583510",
+            "order": {
+              "conid": 265598,
+              "orderType": "LMT",
+              "outsideRTH": false,
+              "price": 100,
+              "quantity": 1,
+              "side": "BUY",
+              "ticker": "AAPL",
+              "tif": "DAY"
+            },
+            "risk": {
+              "metadata": {
+                "notional": 100
+              },
+              "passed": true,
+              "reason": null,
+              "rule": "passed"
+            }
+          },
+          "requiresManualConfirmation": false,
+          "status": "submitted"
+        },
+        "endpoint": "/orders",
+        "isPreview": false,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "9fc2322a-a752-4444-98ca-3dc45cec8605",
+        "status": "submitted",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T20:35:01.146Z"
+    },
+    {
+      "id": "8470b626-240d-49e1-a428-5f0b6824ff6a",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": false,
+        "orderId": "4b07c290-460b-4f1a-b1fb-a56d5d632e49",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:37:07.971Z"
+    },
+    {
+      "id": "3c80f72d-1427-4cde-8288-e04bf713170e",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "ok": true,
+          "dryRun": true,
+          "rawResponse": {
+            "accountId": "DUQ583510",
+            "order": {
+              "conid": 265598,
+              "orderType": "LMT",
+              "outsideRTH": false,
+              "price": 100,
+              "quantity": 1,
+              "side": "BUY",
+              "ticker": "AAPL",
+              "tif": "DAY"
+            },
+            "risk": {
+              "metadata": {
+                "notional": 100
+              },
+              "passed": true,
+              "reason": null,
+              "rule": "passed"
+            }
+          },
+          "requiresManualConfirmation": false,
+          "status": "submitted"
+        },
+        "endpoint": "/orders",
+        "isPreview": false,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "4b07c290-460b-4f1a-b1fb-a56d5d632e49",
+        "status": "submitted",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T20:37:07.973Z"
+    },
+    {
+      "id": "6117d23f-afb7-4150-ae33-382afa893dc9",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": true,
+        "orderId": "92bec293-8504-4f1d-a0d1-fa5c260868f5",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:49:07.704Z"
+    },
+    {
+      "id": "8d552c7f-681d-48af-9a06-cdef704be51b",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "ok": true,
+          "dryRun": true,
+          "rawResponse": {
+            "accountId": "DUQ583510",
+            "order": {
+              "conid": 265598,
+              "orderType": "LMT",
+              "outsideRTH": false,
+              "price": 100,
+              "quantity": 1,
+              "side": "BUY",
+              "ticker": "AAPL",
+              "tif": "DAY"
+            },
+            "risk": {
+              "metadata": {
+                "notional": 100
+              },
+              "passed": true,
+              "reason": null,
+              "rule": "passed"
+            }
+          },
+          "requiresManualConfirmation": false,
+          "status": "previewed"
+        },
+        "endpoint": "/orders/preview",
+        "isPreview": true,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "92bec293-8504-4f1d-a0d1-fa5c260868f5",
+        "status": "previewed",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T20:49:07.706Z"
+    },
+    {
+      "id": "b06581bb-39bd-4b30-a020-467d57c4b4bc",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": false,
+        "orderId": "14435dcc-afcb-4921-adc5-1eb1cc9e00a1",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:49:15.507Z"
+    },
+    {
+      "id": "639bbe08-20f7-470a-8ed9-aef285ebff76",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "ok": true,
+          "dryRun": true,
+          "rawResponse": {
+            "accountId": "DUQ583510",
+            "order": {
+              "conid": 265598,
+              "orderType": "LMT",
+              "outsideRTH": false,
+              "price": 100,
+              "quantity": 1,
+              "side": "BUY",
+              "ticker": "AAPL",
+              "tif": "DAY"
+            },
+            "risk": {
+              "metadata": {
+                "notional": 100
+              },
+              "passed": true,
+              "reason": null,
+              "rule": "passed"
+            }
+          },
+          "requiresManualConfirmation": false,
+          "status": "submitted"
+        },
+        "endpoint": "/orders",
+        "isPreview": false,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "14435dcc-afcb-4921-adc5-1eb1cc9e00a1",
+        "status": "submitted",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T20:49:15.508Z"
+    },
+    {
+      "id": "27433e83-d5f0-4daa-90ad-98f0d721c496",
+      "level": "info",
+      "message": "market_price_updated",
+      "metadata": {
+        "symbol": "BTCUSDT",
+        "price": 65000
+      },
+      "created_at": "2026-06-04T20:49:25.734Z"
+    },
+    {
+      "id": "c45a3921-9896-4313-a2d3-4e2a833f9550",
+      "level": "info",
+      "message": "market_price_updated",
+      "metadata": {
+        "symbol": "BTCUSDT",
+        "price": 65000
+      },
+      "created_at": "2026-06-04T20:49:26.284Z"
+    },
+    {
+      "id": "e36adbc6-ee21-4112-895d-e576cd095393",
+      "level": "warn",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "dailyTrades": 3,
+            "maxDailyTrades": 3
+          },
+          "passed": false,
+          "reason": "Daily trade limit reached",
+          "rule": "max_daily_trades"
+        },
+        "isPreview": false,
+        "orderId": "a89769a9-8074-4d15-94bd-4d36b05070d0",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:50:09.403Z"
+    },
+    {
+      "id": "7f4c7903-c4f7-43eb-a2cb-891f5f4325b8",
+      "level": "warn",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "dailyTrades": 3,
+            "maxDailyTrades": 3
+          },
+          "passed": false,
+          "reason": "Daily trade limit reached",
+          "rule": "max_daily_trades"
+        },
+        "isPreview": false,
+        "orderId": "29563a09-feba-4532-9638-286479cc6902",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:51:01.674Z"
+    },
+    {
+      "id": "afe4879b-12db-4236-afec-68cf9a71a685",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": false,
+        "orderId": "587eaa7a-e576-4d48-a92e-6786d20b2416",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:53:07.538Z"
+    },
+    {
+      "id": "bb24b1e5-61cc-4850-8cf5-1c8bc01bb047",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "ok": true,
+          "dryRun": true,
+          "rawResponse": {
+            "accountId": "DUQ583510",
+            "order": {
+              "conid": 265598,
+              "orderType": "LMT",
+              "outsideRTH": false,
+              "price": 100,
+              "quantity": 1,
+              "side": "BUY",
+              "ticker": "AAPL",
+              "tif": "DAY"
+            },
+            "risk": {
+              "metadata": {
+                "notional": 100
+              },
+              "passed": true,
+              "reason": null,
+              "rule": "passed"
+            }
+          },
+          "requiresManualConfirmation": false,
+          "status": "submitted"
+        },
+        "endpoint": "/orders",
+        "isPreview": false,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "587eaa7a-e576-4d48-a92e-6786d20b2416",
+        "status": "submitted",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T20:53:07.547Z"
+    },
+    {
+      "id": "9d0dcc42-978f-4ee3-a8eb-d9cc6b5c2d0b",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": false,
+        "orderId": "cd50cbf2-9f96-498b-9b4e-a8a8b073bc4d",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:53:52.509Z"
+    },
+    {
+      "id": "0073b1be-f2b8-4e56-9556-05f4a482de4d",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "ok": true,
+          "dryRun": true,
+          "rawResponse": {
+            "accountId": "DUQ583510",
+            "order": {
+              "conid": 265598,
+              "orderType": "LMT",
+              "outsideRTH": false,
+              "price": 100,
+              "quantity": 1,
+              "side": "BUY",
+              "ticker": "AAPL",
+              "tif": "DAY"
+            },
+            "risk": {
+              "metadata": {
+                "notional": 100
+              },
+              "passed": true,
+              "reason": null,
+              "rule": "passed"
+            }
+          },
+          "requiresManualConfirmation": false,
+          "status": "submitted"
+        },
+        "endpoint": "/orders",
+        "isPreview": false,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "cd50cbf2-9f96-498b-9b4e-a8a8b073bc4d",
+        "status": "submitted",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T20:53:52.512Z"
+    },
+    {
+      "id": "43c44d64-e3dc-42c3-95fe-c48d805e139e",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": true,
+        "orderId": "b2fc393c-9d87-47a6-bd2f-b04e6f5dbabc",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:55:30.481Z"
+    },
+    {
+      "id": "fd0cfa27-16be-4a61-b52d-ebe8aca42b15",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "ok": true,
+          "dryRun": true,
+          "rawResponse": {
+            "accountId": "DUQ583510",
+            "order": {
+              "conid": 265598,
+              "orderType": "LMT",
+              "outsideRTH": false,
+              "price": 100,
+              "quantity": 1,
+              "side": "BUY",
+              "ticker": "AAPL",
+              "tif": "DAY"
+            },
+            "risk": {
+              "metadata": {
+                "notional": 100
+              },
+              "passed": true,
+              "reason": null,
+              "rule": "passed"
+            }
+          },
+          "requiresManualConfirmation": false,
+          "status": "previewed"
+        },
+        "endpoint": "/orders/preview",
+        "isPreview": true,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "b2fc393c-9d87-47a6-bd2f-b04e6f5dbabc",
+        "status": "previewed",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T20:55:30.484Z"
+    },
+    {
+      "id": "ab92dadd-bff5-44dc-a6d8-965b53a72645",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": true,
+        "orderId": "13692f95-ca3f-487d-a53f-b63cca881e36",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T20:55:30.875Z"
+    },
+    {
+      "id": "a80ed44d-edc3-4bc9-92e0-150865eb626d",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "ok": true,
+          "dryRun": true,
+          "rawResponse": {
+            "accountId": "DUQ583510",
+            "order": {
+              "conid": 265598,
+              "orderType": "LMT",
+              "outsideRTH": false,
+              "price": 100,
+              "quantity": 1,
+              "side": "BUY",
+              "ticker": "AAPL",
+              "tif": "DAY"
+            },
+            "risk": {
+              "metadata": {
+                "notional": 100
+              },
+              "passed": true,
+              "reason": null,
+              "rule": "passed"
+            }
+          },
+          "requiresManualConfirmation": false,
+          "status": "previewed"
+        },
+        "endpoint": "/orders/preview",
+        "isPreview": true,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "13692f95-ca3f-487d-a53f-b63cca881e36",
+        "status": "previewed",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T20:55:30.876Z"
+    },
+    {
+      "id": "2e339056-379e-4867-8fbc-d764b9e8ec2d",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": true,
+        "orderId": "00575f70-899e-49c9-b978-5e1b0d4e545c",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T21:01:09.776Z"
+    },
+    {
+      "id": "c043056f-7824-46cf-8561-34b09bcec53c",
+      "level": "error",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {},
+        "endpoint": "/orders/preview",
+        "isPreview": true,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "00575f70-899e-49c9-b978-5e1b0d4e545c",
+        "status": "broker_error",
+        "statusCode": 500
+      },
+      "created_at": "2026-06-04T21:01:14.843Z"
+    },
+    {
+      "id": "74588648-edf9-43dd-a6cd-e80d38e486b4",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": false,
+        "orderId": "7e0b11b1-c802-41c8-86a2-f83a566709e4",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T21:05:35.603Z"
+    },
+    {
+      "id": "c7a9a765-f4be-4d9a-8943-82352b0bee8b",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "dryRun": false,
+          "ok": true,
+          "rawResponse": {
+            "ok": true,
+            "dryRun": false,
+            "mode": "tws",
+            "rawResponse": {
+              "contract": {
+                "secType": "STK",
+                "conId": 265598,
+                "symbol": "AAPL",
+                "lastTradeDateOrContractMonth": "",
+                "strike": 0,
+                "right": "",
+                "multiplier": "",
+                "exchange": "SMART",
+                "primaryExchange": "NASDAQ",
+                "currency": "USD",
+                "localSymbol": "AAPL",
+                "tradingClass": "NMS",
+                "includeExpired": false,
+                "secIdType": "",
+                "secId": "",
+                "description": "",
+                "issuerId": "",
+                "comboLegsDescrip": "",
+                "comboLegs": [],
+                "deltaNeutralContract": null
+              },
+              "fills": [],
+              "log": [
+                {
+                  "time": "2026-06-04 21:05:37.124477+00:00",
+                  "status": "PendingSubmit",
+                  "message": "",
+                  "errorCode": 0
+                },
+                {
+                  "time": "2026-06-04 21:05:37.283047+00:00",
+                  "status": "PreSubmitted",
+                  "message": "",
+                  "errorCode": 0
+                },
+                {
+                  "time": "2026-06-04 21:05:37.291316+00:00",
+                  "status": "Submitted",
+                  "message": "",
+                  "errorCode": 0
+                }
+              ],
+              "order": {
+                "orderId": 8,
+                "clientId": 1,
+                "permId": 1224611736,
+                "action": "BUY",
+                "totalQuantity": 1,
+                "orderType": "LMT",
+                "lmtPrice": 100,
+                "auxPrice": 0,
+                "tif": "DAY",
+                "activeStartTime": "",
+                "activeStopTime": "",
+                "ocaGroup": "",
+                "ocaType": 0,
+                "orderRef": "",
+                "transmit": true,
+                "parentId": 0,
+                "blockOrder": false,
+                "sweepToFill": false,
+                "displaySize": 0,
+                "triggerMethod": 0,
+                "outsideRth": false,
+                "hidden": false,
+                "goodAfterTime": "",
+                "goodTillDate": "",
+                "rule80A": "",
+                "allOrNone": false,
+                "minQty": 2147483647,
+                "percentOffset": 1.7976931348623157e+308,
+                "overridePercentageConstraints": false,
+                "trailStopPrice": 1.7976931348623157e+308,
+                "trailingPercent": 1.7976931348623157e+308,
+                "faGroup": "",
+                "faProfile": "",
+                "faMethod": "",
+                "faPercentage": "",
+                "designatedLocation": "",
+                "openClose": "O",
+                "origin": 0,
+                "shortSaleSlot": 0,
+                "exemptCode": -1,
+                "discretionaryAmt": 0,
+                "eTradeOnly": false,
+                "firmQuoteOnly": false,
+                "nbboPriceCap": 1.7976931348623157e+308,
+                "optOutSmartRouting": false,
+                "auctionStrategy": 0,
+                "startingPrice": 1.7976931348623157e+308,
+                "stockRefPrice": 1.7976931348623157e+308,
+                "delta": 1.7976931348623157e+308,
+                "stockRangeLower": 1.7976931348623157e+308,
+                "stockRangeUpper": 1.7976931348623157e+308,
+                "randomizePrice": false,
+                "randomizeSize": false,
+                "volatility": 1.7976931348623157e+308,
+                "volatilityType": 2147483647,
+                "deltaNeutralOrderType": "",
+                "deltaNeutralAuxPrice": 1.7976931348623157e+308,
+                "deltaNeutralConId": 0,
+                "deltaNeutralSettlingFirm": "",
+                "deltaNeutralClearingAccount": "",
+                "deltaNeutralClearingIntent": "",
+                "deltaNeutralOpenClose": "",
+                "deltaNeutralShortSale": false,
+                "deltaNeutralShortSaleSlot": 0,
+                "deltaNeutralDesignatedLocation": "",
+                "continuousUpdate": false,
+                "referencePriceType": 2147483647,
+                "basisPoints": 1.7976931348623157e+308,
+                "basisPointsType": 2147483647,
+                "scaleInitLevelSize": 2147483647,
+                "scaleSubsLevelSize": 2147483647,
+                "scalePriceIncrement": 1.7976931348623157e+308,
+                "scalePriceAdjustValue": 1.7976931348623157e+308,
+                "scalePriceAdjustInterval": 2147483647,
+                "scaleProfitOffset": 1.7976931348623157e+308,
+                "scaleAutoReset": false,
+                "scaleInitPosition": 2147483647,
+                "scaleInitFillQty": 2147483647,
+                "scaleRandomPercent": false,
+                "scaleTable": "",
+                "hedgeType": "",
+                "hedgeParam": "",
+                "account": "DUQ583510",
+                "settlingFirm": "",
+                "clearingAccount": "",
+                "clearingIntent": "",
+                "algoStrategy": "",
+                "algoParams": [],
+                "smartComboRoutingParams": [],
+                "algoId": "",
+                "whatIf": false,
+                "notHeld": false,
+                "solicited": false,
+                "modelCode": "",
+                "orderComboLegs": [],
+                "orderMiscOptions": [],
+                "referenceContractId": 0,
+                "peggedChangeAmount": 0,
+                "isPeggedChangeAmountDecrease": false,
+                "referenceChangeAmount": 0,
+                "referenceExchangeId": "",
+                "adjustedOrderType": "",
+                "triggerPrice": 1.7976931348623157e+308,
+                "adjustedStopPrice": 1.7976931348623157e+308,
+                "adjustedStopLimitPrice": 1.7976931348623157e+308,
+                "adjustedTrailingAmount": 1.7976931348623157e+308,
+                "adjustableTrailingUnit": 0,
+                "lmtPriceOffset": 1.7976931348623157e+308,
+                "conditions": [],
+                "conditionsCancelOrder": false,
+                "conditionsIgnoreRth": false,
+                "extOperator": "",
+                "softDollarTier": {
+                  "name": "",
+                  "val": "",
+                  "displayName": ""
+                },
+                "cashQty": 1.7976931348623157e+308,
+                "mifid2DecisionMaker": "",
+                "mifid2DecisionAlgo": "",
+                "mifid2ExecutionTrader": "",
+                "mifid2ExecutionAlgo": "",
+                "dontUseAutoPriceForHedge": false,
+                "isOmsContainer": false,
+                "discretionaryUpToLimitPrice": false,
+                "autoCancelDate": "",
+                "filledQuantity": 1.7976931348623157e+308,
+                "refFuturesConId": 0,
+                "autoCancelParent": false,
+                "shareholder": "",
+                "imbalanceOnly": false,
+                "routeMarketableToBbo": false,
+                "parentPermId": 0,
+                "usePriceMgmtAlgo": false,
+                "duration": 2147483647,
+                "postToAts": 2147483647,
+                "advancedErrorOverride": "",
+                "manualOrderTime": "",
+                "minTradeQty": 2147483647,
+                "minCompeteSize": 2147483647,
+                "competeAgainstBestOffset": 1.7976931348623157e+308,
+                "midOffsetAtWhole": 1.7976931348623157e+308,
+                "midOffsetAtHalf": 1.7976931348623157e+308
+              },
+              "orderState": null,
+              "orderStatus": {
+                "orderId": 8,
+                "status": "Submitted",
+                "filled": 0,
+                "remaining": 1,
+                "avgFillPrice": 0,
+                "permId": 1224611736,
+                "parentId": 0,
+                "lastFillPrice": 0,
+                "clientId": 1,
+                "whyHeld": "",
+                "mktCapPrice": 0
+              }
+            },
+            "requiresManualConfirmation": false,
+            "status": "submitted"
+          },
+          "requiresManualConfirmation": false,
+          "status": "submitted"
+        },
+        "endpoint": "/orders",
+        "isPreview": false,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "7e0b11b1-c802-41c8-86a2-f83a566709e4",
+        "status": "submitted",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T21:05:40.163Z"
+    },
+    {
+      "id": "6295f01a-f24a-4a09-a84e-bfa716793da8",
+      "level": "warn",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "maxOrderNotional": 100,
+            "notional": 1000
+          },
+          "passed": false,
+          "reason": "Order notional exceeds max order notional",
+          "rule": "max_order_notional"
+        },
+        "isPreview": false,
+        "orderId": "597c0835-92b7-4c50-b88b-229cec23a3e2",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 1000,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T21:06:33.714Z"
+    },
+    {
+      "id": "f6e263bc-ab9f-4438-9c1c-8a999b92d624",
+      "level": "warn",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "maxOrderNotional": 100,
+            "notional": 200
+          },
+          "passed": false,
+          "reason": "Order notional exceeds max order notional",
+          "rule": "max_order_notional"
+        },
+        "isPreview": false,
+        "orderId": "25f0e744-945e-4902-9579-ab06d2930be0",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 200,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T21:06:43.621Z"
+    },
+    {
+      "id": "7ad372da-f698-4b17-89fa-78732bf7dbfe",
+      "level": "warn",
+      "message": "risk_unlock_manual",
+      "metadata": {},
+      "created_at": "2026-06-04T21:08:18.759Z"
+    },
+    {
+      "id": "0d23d7d7-7832-4cd7-86d8-cdb01c15a205",
+      "level": "info",
+      "message": "kapso_command_received",
+      "metadata": {
+        "command": "estado",
+        "response": "Estado: paused | modo: simulated | capital: 10000"
+      },
+      "created_at": "2026-06-04T21:08:20.304Z"
+    },
+    {
+      "id": "6158f2e2-d489-476e-acb6-dae1a35a5163",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": false,
+        "orderId": "3f2bf7a0-9fa0-4d57-8f86-ea24f1f895ee",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T21:08:27.257Z"
+    },
+    {
+      "id": "d1e030e9-0d18-4ea7-980b-5fd518c8bcba",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "dryRun": false,
+          "ok": true,
+          "rawResponse": {
+            "ok": true,
+            "dryRun": false,
+            "mode": "tws",
+            "rawResponse": {
+              "contract": {
+                "secType": "STK",
+                "conId": 265598,
+                "symbol": "AAPL",
+                "lastTradeDateOrContractMonth": "",
+                "strike": 0,
+                "right": "",
+                "multiplier": "",
+                "exchange": "SMART",
+                "primaryExchange": "NASDAQ",
+                "currency": "USD",
+                "localSymbol": "AAPL",
+                "tradingClass": "NMS",
+                "includeExpired": false,
+                "secIdType": "",
+                "secId": "",
+                "description": "",
+                "issuerId": "",
+                "comboLegsDescrip": "",
+                "comboLegs": [],
+                "deltaNeutralContract": null
+              },
+              "fills": [],
+              "log": [
+                {
+                  "time": "2026-06-04 21:08:28.670855+00:00",
+                  "status": "PendingSubmit",
+                  "message": "",
+                  "errorCode": 0
+                },
+                {
+                  "time": "2026-06-04 21:08:28.771490+00:00",
+                  "status": "PreSubmitted",
+                  "message": "",
+                  "errorCode": 0
+                },
+                {
+                  "time": "2026-06-04 21:08:28.791109+00:00",
+                  "status": "Submitted",
+                  "message": "",
+                  "errorCode": 0
+                }
+              ],
+              "order": {
+                "orderId": 12,
+                "clientId": 1,
+                "permId": 1224611737,
+                "action": "BUY",
+                "totalQuantity": 1,
+                "orderType": "LMT",
+                "lmtPrice": 100,
+                "auxPrice": 0,
+                "tif": "DAY",
+                "activeStartTime": "",
+                "activeStopTime": "",
+                "ocaGroup": "",
+                "ocaType": 0,
+                "orderRef": "",
+                "transmit": true,
+                "parentId": 0,
+                "blockOrder": false,
+                "sweepToFill": false,
+                "displaySize": 0,
+                "triggerMethod": 0,
+                "outsideRth": false,
+                "hidden": false,
+                "goodAfterTime": "",
+                "goodTillDate": "",
+                "rule80A": "",
+                "allOrNone": false,
+                "minQty": 2147483647,
+                "percentOffset": 1.7976931348623157e+308,
+                "overridePercentageConstraints": false,
+                "trailStopPrice": 1.7976931348623157e+308,
+                "trailingPercent": 1.7976931348623157e+308,
+                "faGroup": "",
+                "faProfile": "",
+                "faMethod": "",
+                "faPercentage": "",
+                "designatedLocation": "",
+                "openClose": "O",
+                "origin": 0,
+                "shortSaleSlot": 0,
+                "exemptCode": -1,
+                "discretionaryAmt": 0,
+                "eTradeOnly": false,
+                "firmQuoteOnly": false,
+                "nbboPriceCap": 1.7976931348623157e+308,
+                "optOutSmartRouting": false,
+                "auctionStrategy": 0,
+                "startingPrice": 1.7976931348623157e+308,
+                "stockRefPrice": 1.7976931348623157e+308,
+                "delta": 1.7976931348623157e+308,
+                "stockRangeLower": 1.7976931348623157e+308,
+                "stockRangeUpper": 1.7976931348623157e+308,
+                "randomizePrice": false,
+                "randomizeSize": false,
+                "volatility": 1.7976931348623157e+308,
+                "volatilityType": 2147483647,
+                "deltaNeutralOrderType": "",
+                "deltaNeutralAuxPrice": 1.7976931348623157e+308,
+                "deltaNeutralConId": 0,
+                "deltaNeutralSettlingFirm": "",
+                "deltaNeutralClearingAccount": "",
+                "deltaNeutralClearingIntent": "",
+                "deltaNeutralOpenClose": "",
+                "deltaNeutralShortSale": false,
+                "deltaNeutralShortSaleSlot": 0,
+                "deltaNeutralDesignatedLocation": "",
+                "continuousUpdate": false,
+                "referencePriceType": 2147483647,
+                "basisPoints": 1.7976931348623157e+308,
+                "basisPointsType": 2147483647,
+                "scaleInitLevelSize": 2147483647,
+                "scaleSubsLevelSize": 2147483647,
+                "scalePriceIncrement": 1.7976931348623157e+308,
+                "scalePriceAdjustValue": 1.7976931348623157e+308,
+                "scalePriceAdjustInterval": 2147483647,
+                "scaleProfitOffset": 1.7976931348623157e+308,
+                "scaleAutoReset": false,
+                "scaleInitPosition": 2147483647,
+                "scaleInitFillQty": 2147483647,
+                "scaleRandomPercent": false,
+                "scaleTable": "",
+                "hedgeType": "",
+                "hedgeParam": "",
+                "account": "DUQ583510",
+                "settlingFirm": "",
+                "clearingAccount": "",
+                "clearingIntent": "",
+                "algoStrategy": "",
+                "algoParams": [],
+                "smartComboRoutingParams": [],
+                "algoId": "",
+                "whatIf": false,
+                "notHeld": false,
+                "solicited": false,
+                "modelCode": "",
+                "orderComboLegs": [],
+                "orderMiscOptions": [],
+                "referenceContractId": 0,
+                "peggedChangeAmount": 0,
+                "isPeggedChangeAmountDecrease": false,
+                "referenceChangeAmount": 0,
+                "referenceExchangeId": "",
+                "adjustedOrderType": "",
+                "triggerPrice": 1.7976931348623157e+308,
+                "adjustedStopPrice": 1.7976931348623157e+308,
+                "adjustedStopLimitPrice": 1.7976931348623157e+308,
+                "adjustedTrailingAmount": 1.7976931348623157e+308,
+                "adjustableTrailingUnit": 0,
+                "lmtPriceOffset": 1.7976931348623157e+308,
+                "conditions": [],
+                "conditionsCancelOrder": false,
+                "conditionsIgnoreRth": false,
+                "extOperator": "",
+                "softDollarTier": {
+                  "name": "",
+                  "val": "",
+                  "displayName": ""
+                },
+                "cashQty": 1.7976931348623157e+308,
+                "mifid2DecisionMaker": "",
+                "mifid2DecisionAlgo": "",
+                "mifid2ExecutionTrader": "",
+                "mifid2ExecutionAlgo": "",
+                "dontUseAutoPriceForHedge": false,
+                "isOmsContainer": false,
+                "discretionaryUpToLimitPrice": false,
+                "autoCancelDate": "",
+                "filledQuantity": 1.7976931348623157e+308,
+                "refFuturesConId": 0,
+                "autoCancelParent": false,
+                "shareholder": "",
+                "imbalanceOnly": false,
+                "routeMarketableToBbo": false,
+                "parentPermId": 0,
+                "usePriceMgmtAlgo": false,
+                "duration": 2147483647,
+                "postToAts": 2147483647,
+                "advancedErrorOverride": "",
+                "manualOrderTime": "",
+                "minTradeQty": 2147483647,
+                "minCompeteSize": 2147483647,
+                "competeAgainstBestOffset": 1.7976931348623157e+308,
+                "midOffsetAtWhole": 1.7976931348623157e+308,
+                "midOffsetAtHalf": 1.7976931348623157e+308
+              },
+              "orderState": null,
+              "orderStatus": {
+                "orderId": 12,
+                "status": "Submitted",
+                "filled": 0,
+                "remaining": 1,
+                "avgFillPrice": 0,
+                "permId": 1224611737,
+                "parentId": 0,
+                "lastFillPrice": 0,
+                "clientId": 1,
+                "whyHeld": "",
+                "mktCapPrice": 0
+              }
+            },
+            "requiresManualConfirmation": false,
+            "status": "submitted"
+          },
+          "requiresManualConfirmation": false,
+          "status": "submitted"
+        },
+        "endpoint": "/orders",
+        "isPreview": false,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "3f2bf7a0-9fa0-4d57-8f86-ea24f1f895ee",
+        "status": "submitted",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T21:08:31.699Z"
+    },
+    {
+      "id": "a3e90740-3557-40aa-b8b0-9d7aa3ee664f",
+      "level": "info",
+      "message": "assistant_chat",
+      "metadata": {
+        "tool": "latest_signal",
+        "prompt": "última señal"
+      },
+      "created_at": "2026-06-04T21:09:33.345Z"
+    },
+    {
+      "id": "95806d15-ddaf-40be-8390-4c03112ac71d",
+      "level": "info",
+      "message": "assistant_chat",
+      "metadata": {
+        "tool": "trades_summary",
+        "prompt": "operaciones abiertas"
+      },
+      "created_at": "2026-06-04T21:09:39.055Z"
+    },
+    {
+      "id": "348a9803-b770-424c-83ef-0f0f712616aa",
+      "level": "info",
+      "message": "market_price_updated",
+      "metadata": {
+        "symbol": "BTCUSDT",
+        "price": 65000
+      },
+      "created_at": "2026-06-04T21:27:26.118Z"
+    },
+    {
+      "id": "5d711005-407d-4c0d-994d-081e31120e34",
+      "level": "info",
+      "message": "local_trading_risk_check",
+      "metadata": {
+        "decision": {
+          "metadata": {
+            "notional": 100
+          },
+          "passed": true,
+          "reason": null,
+          "rule": "passed"
+        },
+        "isPreview": true,
+        "orderId": "cafd041a-df79-408e-81a9-879eda50ac39",
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        }
+      },
+      "created_at": "2026-06-04T21:33:57.512Z"
+    },
+    {
+      "id": "7b1e0f67-5707-4c43-98d5-e68e9c7f1e58",
+      "level": "info",
+      "message": "local_trading_order",
+      "metadata": {
+        "broker": {
+          "dryRun": false,
+          "ok": true,
+          "rawResponse": {
+            "ok": true,
+            "dryRun": false,
+            "mode": "tws",
+            "rawResponse": {
+              "contract": {
+                "secType": "STK",
+                "conId": 265598,
+                "symbol": "AAPL",
+                "lastTradeDateOrContractMonth": "",
+                "strike": 0,
+                "right": "",
+                "multiplier": "",
+                "exchange": "SMART",
+                "primaryExchange": "NASDAQ",
+                "currency": "USD",
+                "localSymbol": "AAPL",
+                "tradingClass": "NMS",
+                "includeExpired": false,
+                "secIdType": "",
+                "secId": "",
+                "description": "",
+                "issuerId": "",
+                "comboLegsDescrip": "",
+                "comboLegs": [],
+                "deltaNeutralContract": null
+              },
+              "fills": [],
+              "log": [
+                {
+                  "time": "2026-06-04 21:33:58.923357+00:00",
+                  "status": "PendingSubmit",
+                  "message": "",
+                  "errorCode": 0
+                }
+              ],
+              "order": {
+                "orderId": 20,
+                "clientId": 1,
+                "permId": 0,
+                "action": "BUY",
+                "totalQuantity": 1,
+                "orderType": "LMT",
+                "lmtPrice": 100,
+                "auxPrice": 1.7976931348623157e+308,
+                "tif": "DAY",
+                "activeStartTime": "",
+                "activeStopTime": "",
+                "ocaGroup": "",
+                "ocaType": 0,
+                "orderRef": "",
+                "transmit": true,
+                "parentId": 0,
+                "blockOrder": false,
+                "sweepToFill": false,
+                "displaySize": 0,
+                "triggerMethod": 0,
+                "outsideRth": false,
+                "hidden": false,
+                "goodAfterTime": "",
+                "goodTillDate": "",
+                "rule80A": "",
+                "allOrNone": false,
+                "minQty": 2147483647,
+                "percentOffset": 1.7976931348623157e+308,
+                "overridePercentageConstraints": false,
+                "trailStopPrice": 1.7976931348623157e+308,
+                "trailingPercent": 1.7976931348623157e+308,
+                "faGroup": "",
+                "faProfile": "",
+                "faMethod": "",
+                "faPercentage": "",
+                "designatedLocation": "",
+                "openClose": "O",
+                "origin": 0,
+                "shortSaleSlot": 0,
+                "exemptCode": -1,
+                "discretionaryAmt": 0,
+                "eTradeOnly": false,
+                "firmQuoteOnly": false,
+                "nbboPriceCap": 1.7976931348623157e+308,
+                "optOutSmartRouting": false,
+                "auctionStrategy": 0,
+                "startingPrice": 1.7976931348623157e+308,
+                "stockRefPrice": 1.7976931348623157e+308,
+                "delta": 1.7976931348623157e+308,
+                "stockRangeLower": 1.7976931348623157e+308,
+                "stockRangeUpper": 1.7976931348623157e+308,
+                "randomizePrice": false,
+                "randomizeSize": false,
+                "volatility": 1.7976931348623157e+308,
+                "volatilityType": 2147483647,
+                "deltaNeutralOrderType": "",
+                "deltaNeutralAuxPrice": 1.7976931348623157e+308,
+                "deltaNeutralConId": 0,
+                "deltaNeutralSettlingFirm": "",
+                "deltaNeutralClearingAccount": "",
+                "deltaNeutralClearingIntent": "",
+                "deltaNeutralOpenClose": "",
+                "deltaNeutralShortSale": false,
+                "deltaNeutralShortSaleSlot": 0,
+                "deltaNeutralDesignatedLocation": "",
+                "continuousUpdate": false,
+                "referencePriceType": 2147483647,
+                "basisPoints": 1.7976931348623157e+308,
+                "basisPointsType": 2147483647,
+                "scaleInitLevelSize": 2147483647,
+                "scaleSubsLevelSize": 2147483647,
+                "scalePriceIncrement": 1.7976931348623157e+308,
+                "scalePriceAdjustValue": 1.7976931348623157e+308,
+                "scalePriceAdjustInterval": 2147483647,
+                "scaleProfitOffset": 1.7976931348623157e+308,
+                "scaleAutoReset": false,
+                "scaleInitPosition": 2147483647,
+                "scaleInitFillQty": 2147483647,
+                "scaleRandomPercent": false,
+                "scaleTable": "",
+                "hedgeType": "",
+                "hedgeParam": "",
+                "account": "DUQ583510",
+                "settlingFirm": "",
+                "clearingAccount": "",
+                "clearingIntent": "",
+                "algoStrategy": "",
+                "algoParams": [],
+                "smartComboRoutingParams": [],
+                "algoId": "",
+                "whatIf": true,
+                "notHeld": false,
+                "solicited": false,
+                "modelCode": "",
+                "orderComboLegs": [],
+                "orderMiscOptions": [],
+                "referenceContractId": 0,
+                "peggedChangeAmount": 0,
+                "isPeggedChangeAmountDecrease": false,
+                "referenceChangeAmount": 0,
+                "referenceExchangeId": "",
+                "adjustedOrderType": "",
+                "triggerPrice": 1.7976931348623157e+308,
+                "adjustedStopPrice": 1.7976931348623157e+308,
+                "adjustedStopLimitPrice": 1.7976931348623157e+308,
+                "adjustedTrailingAmount": 1.7976931348623157e+308,
+                "adjustableTrailingUnit": 0,
+                "lmtPriceOffset": 1.7976931348623157e+308,
+                "conditions": [],
+                "conditionsCancelOrder": false,
+                "conditionsIgnoreRth": false,
+                "extOperator": "",
+                "softDollarTier": {
+                  "name": "",
+                  "val": "",
+                  "displayName": ""
+                },
+                "cashQty": 1.7976931348623157e+308,
+                "mifid2DecisionMaker": "",
+                "mifid2DecisionAlgo": "",
+                "mifid2ExecutionTrader": "",
+                "mifid2ExecutionAlgo": "",
+                "dontUseAutoPriceForHedge": false,
+                "isOmsContainer": false,
+                "discretionaryUpToLimitPrice": false,
+                "autoCancelDate": "",
+                "filledQuantity": 1.7976931348623157e+308,
+                "refFuturesConId": 0,
+                "autoCancelParent": false,
+                "shareholder": "",
+                "imbalanceOnly": false,
+                "routeMarketableToBbo": false,
+                "parentPermId": 0,
+                "usePriceMgmtAlgo": false,
+                "duration": 2147483647,
+                "postToAts": 2147483647,
+                "advancedErrorOverride": "",
+                "manualOrderTime": "",
+                "minTradeQty": 2147483647,
+                "minCompeteSize": 2147483647,
+                "competeAgainstBestOffset": 1.7976931348623157e+308,
+                "midOffsetAtWhole": 1.7976931348623157e+308,
+                "midOffsetAtHalf": 1.7976931348623157e+308
+              },
+              "orderState": null,
+              "orderStatus": {
+                "orderId": 20,
+                "status": "PendingSubmit",
+                "filled": 0,
+                "remaining": 0,
+                "avgFillPrice": 0,
+                "permId": 0,
+                "parentId": 0,
+                "lastFillPrice": 0,
+                "clientId": 0,
+                "whyHeld": "",
+                "mktCapPrice": 0
+              }
+            },
+            "requiresManualConfirmation": false,
+            "status": "previewed"
+          },
+          "requiresManualConfirmation": false,
+          "status": "previewed"
+        },
+        "endpoint": "/orders/preview",
+        "isPreview": true,
+        "order": {
+          "accountMode": "paper",
+          "conid": 265598,
+          "limitPrice": 100,
+          "orderType": "LMT",
+          "quantity": 1,
+          "side": "BUY",
+          "signal": {
+            "assetClass": "STK",
+            "confidence": 1,
+            "payload": {
+              "source": "dashboard_simulation"
+            },
+            "side": "BUY",
+            "source": "dashboard",
+            "strategyId": "manual_dashboard",
+            "symbol": "AAPL",
+            "timeframe": "manual"
+          },
+          "symbol": "AAPL",
+          "tif": "DAY"
+        },
+        "orderId": "cafd041a-df79-408e-81a9-879eda50ac39",
+        "status": "previewed",
+        "statusCode": 200
+      },
+      "created_at": "2026-06-04T21:34:01.960Z"
+    },
+    {
+      "id": "4a233fba-aff2-4c93-91c3-311f50ca74d8",
+      "level": "info",
+      "message": "assistant_chat",
+      "metadata": {
+        "tool": "trades_summary",
+        "prompt": "operaciones abiertas"
+      },
+      "created_at": "2026-06-04T21:34:05.574Z"
+    },
+    {
+      "id": "dce5c651-bb06-497f-9302-17dd27bfa6dc",
+      "level": "info",
+      "message": "assistant_chat",
+      "metadata": {
+        "tool": "latest_signal",
+        "prompt": "última señal"
+      },
+      "created_at": "2026-06-04T21:34:12.092Z"
+    }
+  ]
 }

@@ -1,114 +1,95 @@
-# ALFA-OMEGA (MVP local sin Supabase online)
+# ALFA-OMEGA
 
-Este repo queda preparado para validar el flujo MVP en local:
+ALFA-OMEGA es un panel operativo de trading con dashboard, API, asistente, gestion de riesgo, Supabase y una integracion modular con Interactive Brokers mediante IBKR Client Portal Gateway.
 
-`señal -> evaluación/score -> trade simulado -> notificación mock -> dashboard`
+Flujo principal:
 
-## Stack actual
+```text
+TradingView / senal manual
+  -> apps/api
+  -> Supabase o data/local-db.json
+  -> packages/risk-engine
+  -> apps/ibkr-executor
+  -> IBKR Client Portal Gateway
+  -> IBKR Paper Account
+```
 
-- `apps/trading-engine` (Python): procesa señales `pending` y abre trades simulados.
-- `apps/api` (Bun + Hono): expone estado, señales, trades, logs y control `pause/resume`.
-- `apps/notification-worker` (Bun): envía notificaciones mock (`[KAPSO MOCK]`).
-- `apps/dashboard` (Next.js): panel operativo consumiendo la API local.
-- `data/local-db.json`: almacenamiento temporal local compartido.
+El frontend nunca envia ordenes directamente a IBKR. Las ordenes pasan por `apps/api`, se registran en Supabase, se validan con `packages/risk-engine` y solo despues se envian a `apps/ibkr-executor`.
+
+## Stack
+
+- `apps/dashboard`: dashboard Next.js.
+- `apps/api`: API Bun + Hono.
+- `apps/notification-worker`: worker Bun para notificaciones Kapso/mock.
+- `apps/trading-engine`: motor Python para senales/trades simulados.
+- `apps/ibkr-executor`: servicio Bun + Hono que habla con IBKR Gateway.
+- `packages/risk-engine`: reglas de riesgo antes de enviar ordenes.
+- `packages/trading-types`: tipos compartidos de trading.
+- `packages/shared`: DB local y adaptador Supabase.
+- `supabase/functions/tradingview-webhook`: Edge Function para senales externas.
 
 ## Requisitos
 
-- Bun
-- Python 3.10+
+- Bun.
+- Python 3.10+.
+- Java 17 solo si vas a correr IBKR Client Portal Gateway.
+- Supabase CLI si vas a desplegar Edge Functions o migraciones.
 
-Instalar dependencias JS:
+Instala dependencias:
 
 ```bash
+cd /Users/raucrow/Barvaz.dev/alfa-omega
 bun install
-```
-
-Instalar dependencias Python del engine:
-
-```bash
 python3 -m pip install -r apps/trading-engine/requirements.txt
 ```
 
-## Variables de entorno
-
-Usa `.env.example` como base.
-
-Variables clave en este modo local:
-
-- `TRADING_MODE=simulated`
-- `WORKER_POLL_INTERVAL_SECONDS=10`
-- `MIN_SIGNAL_SCORE=7` (opcional)
-- `API_PORT=4000`
-- `API_BASE_URL=http://localhost:4000` (para dashboard)
-- `LOCAL_DB_PATH=data/local-db.json` (opcional)
-
-## Ejecutar con un solo comando
-
-Levanta API, trading engine, notification worker y dashboard juntos:
+Prepara variables:
 
 ```bash
+cp .env.example .env
+```
+
+Para modo local seguro puedes dejar Supabase vacio y usar `LOCAL_DB_PATH=data/local-db.json`.
+
+## Ejecutar En Local
+
+Levanta API, trading engine, notification worker y dashboard:
+
+```bash
+cd /Users/raucrow/Barvaz.dev/alfa-omega
 bun run dev
 ```
 
-URLs principales:
+URLs:
 
-- API: `http://localhost:4000`
 - Dashboard: `http://localhost:3000`
+- API: `http://localhost:4000`
 - DB local: `data/local-db.json`
 
-Si un puerto está ocupado:
+Si necesitas cambiar puertos:
 
 ```bash
 API_PORT=4001 API_BASE_URL=http://localhost:4001 NEXT_PUBLIC_API_BASE_URL=http://localhost:4001 DASHBOARD_PORT=3001 bun run dev
 ```
 
-Para incluir también el broker gateway simulado:
-
-```bash
-bun run dev:local:broker
-```
-
-Detener todo:
-
-```bash
-Ctrl+C
-```
-
-## Ejecutar por separado
-
-Terminal 1:
+Ejecutar por separado:
 
 ```bash
 bun run dev:api
-```
-
-Terminal 2:
-
-```bash
 bun run dev:engine
-```
-
-Terminal 3:
-
-```bash
 bun run dev:notification
-```
-
-Terminal 4:
-
-```bash
 bun run dev:dashboard
 ```
 
-## Probar el flujo
+## Comandos De Prueba Local
 
-1) Ver salud API:
+Health API:
 
 ```bash
 curl http://localhost:4000/health
 ```
 
-2) Ingresar señal manual:
+Crear senal manual:
 
 ```bash
 curl -X POST http://localhost:4000/signals \
@@ -127,50 +108,182 @@ curl -X POST http://localhost:4000/signals \
   }'
 ```
 
-3) Revisar procesamiento:
+Consultar estado:
 
 ```bash
 curl http://localhost:4000/signals
 curl http://localhost:4000/trades
+curl http://localhost:4000/risk
 curl http://localhost:4000/notifications
 curl http://localhost:4000/logs
-curl http://localhost:4000/market/prices
 ```
 
-4) Control del bot:
+Control del bot:
 
 ```bash
 curl -X POST http://localhost:4000/pause
 curl -X POST http://localhost:4000/resume
 curl -X POST http://localhost:4000/risk/unlock
-curl http://localhost:4000/risk
 ```
 
-5) Probar comando Kapso mock:
+## Ejecutar IBKR Gateway Y Executor
+
+El gateway de IBKR quedo fuera del repo en:
 
 ```bash
-curl -X POST http://localhost:4000/kapso-webhook \
-  -H "content-type: application/json" \
-  -d '{"command":"estado"}'
+/Users/raucrow/Barvaz.dev/ibkr/clientportal.gw
 ```
 
-6) Cierre de trades (manual y por TP/SL):
+Arranca Client Portal Gateway:
 
 ```bash
-# Actualizar precio de mercado mock (el engine usa este precio para cerrar por TP/SL)
-curl -X POST http://localhost:4000/market/price \
-  -H "content-type: application/json" \
-  -d '{"symbol":"BTCUSDT","price":66000}'
-
-# Cerrar manualmente un trade por ID
-curl -X POST http://localhost:4000/trades/TU_TRADE_ID/close \
-  -H "content-type: application/json" \
-  -d '{"reason":"manual_test","exit_price":66100}'
+cd /Users/raucrow/Barvaz.dev/ibkr/clientportal.gw
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+export PATH="$JAVA_HOME/bin:$PATH"
+bin/run.sh root/conf.local.yaml
 ```
 
-## Pendiente (fase siguiente)
+Abre en el navegador:
 
-- Conectar Supabase Cloud real.
-- Activar Edge Functions (`tradingview-webhook`, `kapso-webhook`, `bot-control`).
-- Cambiar almacenamiento local por repositorios Supabase.
-- Integrar Kapso real y webhook TradingView productivo.
+```text
+https://localhost:5050
+```
+
+Haz login manual con IBKR Paper. Luego valida:
+
+```bash
+curl -k https://localhost:5050/v1/api/iserver/auth/status
+curl -k https://localhost:5050/v1/api/iserver/accounts
+```
+
+En otra terminal arranca el executor:
+
+```bash
+cd /Users/raucrow/Barvaz.dev/alfa-omega
+set -a
+source .env
+set +a
+bun run dev:executor
+```
+
+Health:
+
+```bash
+curl http://localhost:8080/health
+```
+
+Probar auth contra IBKR:
+
+```bash
+EXECUTOR_URL=http://localhost:8080 EXECUTOR_API_KEY=change_me_internal_secret apps/ibkr-executor/scripts/test-auth.sh
+```
+
+Preview de orden paper en modo seguro:
+
+```bash
+EXECUTOR_URL=http://localhost:8080 EXECUTOR_API_KEY=change_me_internal_secret apps/ibkr-executor/scripts/test-preview-aapl.sh
+```
+
+Mantener `IBKR_DRY_RUN=true` hasta confirmar conexion, cuenta, logs y controles de riesgo.
+
+## Simular Ordenes Desde La App
+
+Para probar el flujo completo local sin enviar ordenes reales:
+
+1. Verifica que IB Gateway Paper/TWS escuche en `4002`:
+
+```bash
+lsof -nP -iTCP:4002 -sTCP:LISTEN
+```
+
+2. Reemplaza `IBKR_EXECUTOR_API_KEY` y `EXECUTOR_API_KEY` en `.env` por el mismo secreto.
+
+3. Levanta el executor:
+
+```bash
+set -a
+source .env
+set +a
+bun run dev:executor
+```
+
+4. Levanta la app local:
+
+```bash
+bun run dev
+```
+
+5. Abre:
+
+```text
+http://localhost:3000
+```
+
+6. En `Controles del bot`, usa `Orden paper simulada`:
+
+- `AAPL`
+- `265598`
+- `BUY`
+- `100`
+
+7. Primero presiona `Preview`.
+8. Luego presiona `Simular submit`.
+
+Con `IBKR_DRY_RUN=true`, esto valida dashboard -> API -> risk-engine -> ibkr-executor -> TWS mode, pero no envia una orden real a IBKR.
+
+## Supabase
+
+Para migracion a Supabase real:
+
+1. Configura en `.env`:
+
+```bash
+SUPABASE_URL=...
+SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
+
+2. Aplica migraciones en Supabase:
+
+```bash
+supabase db push
+```
+
+3. Despliega Edge Function de TradingView si aplica:
+
+```bash
+supabase functions deploy tradingview-webhook
+```
+
+## Asistente Gemini
+
+Para activar Gemini:
+
+```bash
+GEMINI_ENABLED=true
+GEMINI_API_KEY=TU_API_KEY_DE_GOOGLE_AI_STUDIO
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Usa una API key de Google AI Studio, no un OAuth Client Secret.
+
+## Render
+
+Render debe levantar servicios separados:
+
+- API: `bun install` y `bun --cwd apps/api start`.
+- Dashboard: `bun install && bun --cwd apps/dashboard build` y `bun --cwd apps/dashboard start`.
+- Notification worker: `bun install` y `bun --cwd apps/notification-worker start`.
+
+IBKR Client Portal Gateway no deberia correr en Render; dejalo en VPS o maquina controlada junto al `ibkr-executor`.
+
+## Seguridad
+
+- No commitear `.env`.
+- No commitear `clientportal.gw`.
+- No exponer el puerto del Gateway IBKR a internet.
+- No activar live trading sin revision separada.
+- No auto-confirmar warnings de IBKR por defecto.
+- Mantener ordenes reales bloqueadas hasta pasar pruebas paper.

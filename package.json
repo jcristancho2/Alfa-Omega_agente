@@ -16,9 +16,11 @@
     "dev:api": "bun --cwd apps/api dev",
     "dev:notification": "bun --cwd apps/notification-worker dev",
     "dev:broker": "bun --cwd apps/broker-gateway dev",
+    "dev:executor": "bun --cwd apps/ibkr-executor dev",
     "dev:engine": "python3 apps/trading-engine/main.py",
     "build": "bun run --filter='*' build",
     "lint": "bun run --filter='*' lint",
-    "typecheck": "bun run --filter='*' typecheck"
+    "typecheck": "bun run --filter='*' typecheck",
+    "test": "bun test"
   }
 }

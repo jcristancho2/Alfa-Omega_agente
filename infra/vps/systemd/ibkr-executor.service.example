@@ -1,0 +1,18 @@
+[Unit]
+Description=Atlas-Omega IBKR Executor
+After=network.target ibkr-gateway.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/atlas-omega/apps/ibkr-executor
+EnvironmentFile=/etc/atlas-omega/ibkr-executor.env
+# Use NODE_TLS_REJECT_UNAUTHORIZED=0 only on a private VPS when Client Portal
+# Gateway uses its local self-signed certificate. Never use this for public TLS.
+Environment=NODE_TLS_REJECT_UNAUTHORIZED=0
+ExecStart=/usr/local/bin/bun run start
+Restart=always
+RestartSec=5
+User=atlas
+
+[Install]
+WantedBy=multi-user.target

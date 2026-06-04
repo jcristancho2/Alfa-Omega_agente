@@ -7,6 +7,20 @@ type Status = "idle" | "loading" | "done" | "error";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
 
+function getResponseMessage(json: Record<string, unknown>) {
+  const risk = json.risk as { reason?: unknown; rule?: unknown } | undefined;
+  const broker = json.broker as { error?: unknown; risk?: { reason?: unknown; rule?: unknown } } | undefined;
+  const error = json.error;
+
+  if (typeof error === "string") return error;
+  if (risk?.reason) return `${risk.reason}${risk.rule ? ` (${risk.rule})` : ""}`;
+  if (broker?.risk?.reason) {
+    return `${broker.risk.reason}${broker.risk.rule ? ` (${broker.risk.rule})` : ""}`;
+  }
+  if (broker?.error) return String(broker.error);
+  return "request failed";
+}
+
 export default function ControlPanel() {
   const router = useRouter();
   const [status, setStatus] = useState<Status>("idle");
@@ -16,6 +30,10 @@ export default function ControlPanel() {
   const [price, setPrice] = useState("65000");
   const [tradeId, setTradeId] = useState("");
   const [exitPrice, setExitPrice] = useState("");
+  const [orderSymbol, setOrderSymbol] = useState("AAPL");
+  const [orderConid, setOrderConid] = useState("265598");
+  const [orderSide, setOrderSide] = useState<"BUY" | "SELL">("BUY");
+  const [orderLimitPrice, setOrderLimitPrice] = useState("100");
 
   async function run(path: string, body?: Record<string, unknown>) {
     setStatus("loading");
@@ -26,15 +44,38 @@ export default function ControlPanel() {
         headers: { "content-type": "application/json" },
         body: body ? JSON.stringify(body) : undefined
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error ? JSON.stringify(json.error) : "request failed");
+      const json = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) throw new Error(getResponseMessage(json));
       setStatus("done");
-      setMessage(json?.response || json?.status || "ok");
+      setMessage(json?.orderId ? `${json.status || "ok"} ${json.orderId}` : json?.response || json?.status || "ok");
       router.refresh();
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "error");
     }
+  }
+
+  function orderPayload() {
+    return {
+      accountMode: "paper",
+      conid: Number(orderConid),
+      limitPrice: Number(orderLimitPrice),
+      orderType: "LMT",
+      quantity: 1,
+      side: orderSide,
+      signal: {
+        assetClass: "STK",
+        confidence: 1,
+        payload: { source: "dashboard_simulation" },
+        side: orderSide,
+        source: "dashboard",
+        strategyId: "manual_dashboard",
+        symbol: orderSymbol,
+        timeframe: "manual"
+      },
+      symbol: orderSymbol,
+      tif: "DAY"
+    };
   }
 
   return (
@@ -146,6 +187,59 @@ export default function ControlPanel() {
         >
           Cerrar
         </button>
+      </div>
+
+      <div className="mt-4 rounded border border-emerald-400/15 bg-emerald-500/5 p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-emerald-100">Orden paper IBKR</h3>
+          <span className="rounded bg-emerald-400/10 px-2 py-1 text-[11px] font-semibold text-emerald-200">
+            LMT x1
+          </span>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr]">
+          <input
+            value={orderSymbol}
+            onChange={(event) => setOrderSymbol(event.target.value.toUpperCase())}
+            className="h-10 rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"
+            placeholder="AAPL"
+          />
+          <input
+            value={orderConid}
+            onChange={(event) => setOrderConid(event.target.value)}
+            className="h-10 rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"
+            placeholder="265598"
+          />
+          <select
+            value={orderSide}
+            onChange={(event) => setOrderSide(event.target.value as "BUY" | "SELL")}
+            className="h-10 rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"
+          >
+            <option value="BUY">BUY</option>
+            <option value="SELL">SELL</option>
+          </select>
+          <input
+            value={orderLimitPrice}
+            onChange={(event) => setOrderLimitPrice(event.target.value)}
+            className="h-10 rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"
+            placeholder="Limit price"
+          />
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => run("/api/trading/orders/preview", orderPayload())}
+            className="h-10 rounded border border-emerald-400/35 bg-emerald-500/15 px-3 text-sm font-semibold text-emerald-100"
+          >
+            Preview
+          </button>
+          <button
+            type="button"
+            onClick={() => run("/api/trading/orders/submit", orderPayload())}
+            className="h-10 rounded border border-amber-400/35 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100"
+          >
+            Enviar paper
+          </button>
+        </div>
       </div>
 
       <p className="mt-3 min-h-5 font-mono text-xs text-slate-500">
