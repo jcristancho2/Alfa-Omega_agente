@@ -245,7 +245,8 @@ export default function AssistantPanel() {
             type="submit"
             aria-label="Enviar pregunta al asistente"
             title="Envía tu pregunta al asistente ALFA."
-            className="h-10 rounded border border-cyan-400/35 bg-cyan-500/15 px-3 text-sm font-semibold text-cyan-100"
+            disabled={!input.trim()}
+            className="h-10 rounded border border-cyan-400/35 bg-cyan-500/15 px-3 text-sm font-semibold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Enviar
           </button>

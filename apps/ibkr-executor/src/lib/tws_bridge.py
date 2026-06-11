@@ -5,7 +5,7 @@ import sys
 from typing import Any, Optional
 
 try:
-    from ib_insync import IB, LimitOrder, StopOrder, Stock
+    from ib_insync import Contract, IB, LimitOrder, StopOrder
 except Exception as exc:
     print(json.dumps({"ok": False, "error": f"ib_insync is not installed: {exc}"}))
     sys.exit(0)
@@ -51,10 +51,30 @@ def serialize(value: Any) -> Any:
 
 
 def build_contract(payload: dict[str, Any]):
-    contract = Stock(str(payload["symbol"]), "SMART", "USD")
-    if payload.get("conid"):
-        contract.conId = int(payload["conid"])
-    return contract
+    asset_class = str(payload.get("assetClass") or "STK")
+    # IBKR represents ETFs as stock contracts.
+    sec_type = "STK" if asset_class == "ETF" else asset_class
+    # Route stocks and ETFs through SMART while retaining the qualified
+    # contract's primary exchange for identification.
+    exchange = "SMART" if sec_type == "STK" else str(payload.get("exchange") or "SMART")
+    return Contract(
+        conId=int(payload.get("conid") or 0),
+        symbol=str(payload.get("symbol") or payload.get("ticker") or ""),
+        secType=sec_type,
+        exchange=exchange,
+        currency=str(payload.get("currency") or "USD"),
+    )
+
+
+def qualify_contract(ib: IB, payload: dict[str, Any]):
+    contract = build_contract(payload)
+    qualified = ib.qualifyContracts(contract)
+    if not qualified:
+        label = payload.get("symbol") or payload.get("ticker") or payload.get("conid")
+        raise ValueError(
+            f"IBKR could not qualify instrument {label}; select a valid instrument from broker search"
+        )
+    return qualified[0]
 
 
 def build_order(payload: dict[str, Any], what_if: bool):
@@ -84,6 +104,19 @@ def order_result(trade) -> dict[str, Any]:
     }
 
 
+def trade_rejection(trade) -> Optional[str]:
+    status = str(getattr(getattr(trade, "orderStatus", None), "status", ""))
+    if status not in ("ApiCancelled", "Cancelled", "Inactive"):
+        return None
+    messages = [
+        str(getattr(entry, "message", ""))
+        for entry in getattr(trade, "log", [])
+        if getattr(entry, "errorCode", 0) and getattr(entry, "message", "")
+    ]
+    detail = messages[-1] if messages else "IBKR rejected or cancelled the order"
+    return f"{detail} (IBKR status: {status})"
+
+
 def instrument_result(contract) -> dict[str, Any]:
     return {
         "assetClass": getattr(contract, "secType", "STK") or "STK",
@@ -93,6 +126,7 @@ def instrument_result(contract) -> dict[str, Any]:
         "instrumentId": str(getattr(contract, "conId", "")),
         "name": getattr(contract, "description", "") or getattr(contract, "symbol", ""),
         "symbol": getattr(contract, "symbol", ""),
+        "tradable": getattr(contract, "secType", "STK") != "IND",
     }
 
 
@@ -151,19 +185,37 @@ def main() -> None:
             return
 
         if action == "searchInstruments":
-            matches = ib.reqMatchingSymbols(str(payload.get("query", "")))
+            query = str(payload.get("query", "")).strip()
+            normalized_query = "".join(char for char in query.lower() if char.isalnum())
+            aliases = {
+                "sp500": ["SPX", "SPY", "ES"],
+                "sandp500": ["SPX", "SPY", "ES"],
+                "nasdaq100": ["NDX", "QQQ", "NQ"],
+                "dowjones": ["DJX", "DIA", "YM"],
+                "russell2000": ["RUT", "IWM", "RTY"],
+                "dax": ["DAX", "EXS1"],
+                "ftse100": ["FTSE", "ISF"],
+                "nikkei225": ["N225", "EWJ", "NKD"],
+            }
+            search_terms = aliases.get(normalized_query, [query])
+            matches = []
+            seen = set()
+            for term in search_terms:
+                for match in ib.reqMatchingSymbols(term):
+                    conid = getattr(match.contract, "conId", None)
+                    if conid in seen:
+                        continue
+                    seen.add(conid)
+                    matches.append(match)
             print(json.dumps({
                 "ok": True,
                 "mode": "tws",
-                "instruments": [instrument_result(match.contract) for match in matches[:25]],
+                "instruments": [instrument_result(match.contract) for match in matches[:50]],
             }))
             return
 
         if action == "historicalData":
-            contract = Stock("", "SMART", "USD")
-            contract.conId = int(payload["conid"])
-            qualified = ib.qualifyContracts(contract)
-            contract = qualified[0] if qualified else contract
+            contract = qualify_contract(ib, payload)
             timeframe = str(payload.get("timeframe", "1h"))
             bars = {
                 "1m": "1 min",
@@ -235,11 +287,13 @@ def main() -> None:
             return
 
         if action in ("preview", "place"):
-            contract = build_contract(payload)
-            qualified = ib.qualifyContracts(contract)
-            contract = qualified[0] if qualified else contract
+            contract = qualify_contract(ib, payload)
             trade = ib.placeOrder(contract, build_order(payload, action == "preview"))
             ib.sleep(3)
+            rejection = trade_rejection(trade)
+            if rejection:
+                print(json.dumps({"ok": False, "error": rejection, "rawResponse": order_result(trade)}))
+                return
             print(json.dumps({
                 "ok": True,
                 "dryRun": False,
@@ -259,17 +313,24 @@ def main() -> None:
             results = []
             parent_id = ib.client.getReqId()
             for index, raw_order in enumerate(raw_orders):
-                contract = Stock(str(raw_order["ticker"]), "SMART", "USD")
-                contract.conId = int(raw_order["conid"])
-                qualified = ib.qualifyContracts(contract)
-                contract = qualified[0] if qualified else contract
+                contract = qualify_contract(ib, raw_order)
                 order = build_wire_order(raw_order, account, what_if)
                 order.orderId = parent_id + index
-                order.parentId = 0 if index == 0 else parent_id
-                order.transmit = index == 2
+                # What-if orders are validated independently because TWS does not
+                # retain a preview parent for the child legs to reference.
+                order.parentId = 0 if what_if or index == 0 else parent_id
+                order.transmit = True if what_if else index == 2
                 trade = ib.placeOrder(contract, order)
                 results.append(trade)
             ib.sleep(3)
+            rejections = [rejection for trade in results if (rejection := trade_rejection(trade))]
+            if rejections:
+                print(json.dumps({
+                    "ok": False,
+                    "error": rejections[-1],
+                    "orders": [order_result(trade) for trade in results],
+                }))
+                return
             print(json.dumps({
                 "ok": True,
                 "dryRun": False,

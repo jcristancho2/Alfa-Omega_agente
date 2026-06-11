@@ -38,7 +38,10 @@ app.onError((error, c) =>
 const OrderSchema = z.object({
   accountId: z.string().optional(),
   accountMode: z.enum(["paper", "live"]).default("paper"),
+  assetClass: z.string().default("STK"),
   conid: z.number().int().positive(),
+  currency: z.string().default("USD"),
+  exchange: z.string().default("SMART"),
   limitPrice: z.number().positive().optional(),
   orderType: z.enum(["LMT", "MKT", "STP", "STOP_LIMIT"]),
   quantity: z.number().positive(),
@@ -52,12 +55,14 @@ const ReplySchema = z.object({
 });
 
 const ExecutorRiskSettingsSchema = z.object({
+  allowedSymbols: z.array(z.string().trim().min(1)).default([]),
   maxDailyTrades: z.number().int().positive(),
   maxOrderNotional: z.number().positive(),
   maxOrderQty: z.number().positive()
 });
 
 let runtimeRiskSettings = {
+  allowedSymbols: config.allowedSymbols,
   maxDailyTrades: config.maxDailyTrades,
   maxOrderNotional: config.maxOrderNotional,
   maxOrderQty: config.maxOrderQty
@@ -85,7 +90,10 @@ function isWarningResponse(data: unknown): string | null {
 
 function toIbkrOrder(input: z.infer<typeof OrderSchema>) {
   return {
+    assetClass: input.assetClass,
     conid: input.conid,
+    currency: input.currency,
+    exchange: input.exchange,
     orderType: input.orderType,
     outsideRTH: false,
     price: input.limitPrice,
@@ -131,7 +139,8 @@ function normalizeInstrumentSearch(raw: unknown) {
       exchange: String(contract.primaryExchange ?? contract.exchange ?? row.exchange ?? "SMART"),
       instrumentId: String(contract.conId ?? row.conid ?? row.instrumentId ?? ""),
       name: String(row.companyName ?? contract.description ?? row.name ?? contract.symbol ?? ""),
-      symbol: String(contract.symbol ?? row.symbol ?? "")
+      symbol: String(contract.symbol ?? row.symbol ?? ""),
+      tradable: String(contract.secType ?? row.assetClass ?? "STK") !== "IND"
     };
   }).filter((entry) => entry.instrumentId && entry.symbol);
 }
@@ -219,6 +228,7 @@ app.post("/orders/preview", async (c) => {
   const risk = validateOrderRisk({
     ...parsed.data,
     allowLiveTrading: config.allowLiveTrading,
+    allowedSymbols: runtimeRiskSettings.allowedSymbols.length ? runtimeRiskSettings.allowedSymbols : undefined,
     dailyTrades: 0,
     killSwitch: false,
     maxDailyTrades: runtimeRiskSettings.maxDailyTrades,
@@ -254,6 +264,7 @@ app.post("/orders", async (c) => {
   const risk = validateOrderRisk({
     ...parsed.data,
     allowLiveTrading: config.allowLiveTrading,
+    allowedSymbols: runtimeRiskSettings.allowedSymbols.length ? runtimeRiskSettings.allowedSymbols : undefined,
     dailyTrades: 0,
     killSwitch: false,
     maxDailyTrades: runtimeRiskSettings.maxDailyTrades,
@@ -299,6 +310,7 @@ for (const action of ["preview", "submit"] as const) {
     const risk = validateOrderRisk({
       ...parsed.data,
       allowLiveTrading: config.allowLiveTrading,
+      allowedSymbols: runtimeRiskSettings.allowedSymbols.length ? runtimeRiskSettings.allowedSymbols : undefined,
       dailyTrades: 0,
       killSwitch: false,
       maxDailyTrades: runtimeRiskSettings.maxDailyTrades,

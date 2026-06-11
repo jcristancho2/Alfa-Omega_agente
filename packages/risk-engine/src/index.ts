@@ -102,10 +102,12 @@ export function validateOrderRisk(input: RiskInput): RiskDecision {
     });
   }
 
-  if (input.allowedSymbols?.length && !input.allowedSymbols.includes(input.symbol)) {
+  const normalizedSymbol = input.symbol.trim().toUpperCase();
+  const normalizedAllowedSymbols = input.allowedSymbols?.map((symbol) => symbol.trim().toUpperCase());
+  if (normalizedAllowedSymbols?.length && !normalizedAllowedSymbols.includes(normalizedSymbol)) {
     return fail("allowed_symbols", "Symbol is not in the allowed symbols list", {
-      allowedSymbols: input.allowedSymbols,
-      symbol: input.symbol
+      allowedSymbols: normalizedAllowedSymbols,
+      symbol: normalizedSymbol
     });
   }
 

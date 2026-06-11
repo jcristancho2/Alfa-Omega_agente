@@ -40,6 +40,15 @@ export default function ControlPanel() {
   const [orderQuantity, setOrderQuantity] = useState("1");
   const [orderType, setOrderType] = useState<OrderType>("LMT");
   const [orderTif, setOrderTif] = useState<TimeInForce>("DAY");
+  const busy = status === "loading";
+  const validMockPrice = Boolean(symbol.trim()) && Number(price) > 0;
+  const validTicker = /^[A-Z0-9._-]+$/.test(orderSymbol.trim());
+  const validOrder =
+    validTicker &&
+    Number.isInteger(Number(orderConid)) &&
+    Number(orderConid) > 0 &&
+    Number(orderQuantity) > 0 &&
+    (orderType !== "LMT" || Number(orderLimitPrice) > 0);
 
   async function run(path: string, body?: Record<string, unknown>) {
     setStatus("loading");
@@ -76,9 +85,7 @@ export default function ControlPanel() {
       tif: orderTif
     };
 
-    if (orderType === "LMT") {
-      payload.limitPrice = Number(orderLimitPrice);
-    }
+    if (orderType === "LMT") payload.limitPrice = Number(orderLimitPrice);
 
     return {
       ...payload,
@@ -119,8 +126,9 @@ export default function ControlPanel() {
           type="button"
           aria-label="Pausar el procesamiento automático del bot"
           title="Pausa el bot para impedir que procese nuevas señales."
+          disabled={busy}
           onClick={() => run("/pause")}
-          className="rounded border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-200"
+          className="rounded border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Pausar
         </button>
@@ -128,8 +136,9 @@ export default function ControlPanel() {
           type="button"
           aria-label="Reanudar el procesamiento automático del bot"
           title="Reanuda el bot si no está bloqueado por riesgo."
+          disabled={busy}
           onClick={() => run("/resume")}
-          className="rounded border border-sky-400/40 bg-sky-500/15 px-3 py-2 text-sm font-semibold text-sky-100"
+          className="rounded border border-sky-400/40 bg-sky-500/15 px-3 py-2 text-sm font-semibold text-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Reanudar
         </button>
@@ -137,8 +146,9 @@ export default function ControlPanel() {
           type="button"
           aria-label="Desbloquear manualmente el control de riesgo"
           title="Quita el bloqueo de riesgo y deja el bot pausado para revisión."
+          disabled={busy}
           onClick={() => run("/risk/unlock")}
-          className="rounded border border-rose-400/40 bg-rose-500/15 px-3 py-2 text-sm font-semibold text-rose-100"
+          className="rounded border border-rose-400/40 bg-rose-500/15 px-3 py-2 text-sm font-semibold text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Unlock
         </button>
@@ -165,8 +175,9 @@ export default function ControlPanel() {
           type="button"
           aria-label="Ejecutar comando Kapso simulado"
           title="Envía el comando seleccionado al webhook simulado de Kapso."
+          disabled={busy}
           onClick={() => run("/kapso-webhook", { command })}
-          className="h-10 rounded border border-cyan-400/35 bg-cyan-500/15 px-3 text-sm font-semibold text-cyan-100"
+          className="h-10 rounded border border-cyan-400/35 bg-cyan-500/15 px-3 text-sm font-semibold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Kapso mock
         </button>
@@ -194,8 +205,9 @@ export default function ControlPanel() {
           type="button"
           aria-label="Guardar precio simulado"
           title="Guarda el precio simulado y permite evaluar cierres y señales locales."
+          disabled={busy || !validMockPrice}
           onClick={() => run("/market/price", { symbol, price: Number(price) })}
-          className="h-10 rounded border border-emerald-400/35 bg-emerald-500/15 px-3 text-sm font-semibold text-emerald-100"
+          className="h-10 rounded border border-emerald-400/35 bg-emerald-500/15 px-3 text-sm font-semibold text-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Precio mock
         </button>
@@ -223,13 +235,14 @@ export default function ControlPanel() {
           type="button"
           aria-label="Cerrar operación local"
           title="Cierra manualmente la operación local indicada."
+          disabled={busy || !tradeId.trim()}
           onClick={() =>
             run(`/trades/${tradeId}/close`, {
               reason: "manual_dashboard",
               exit_price: exitPrice ? Number(exitPrice) : undefined
             })
           }
-          className="h-10 rounded border border-fuchsia-400/35 bg-fuchsia-500/15 px-3 text-sm font-semibold text-fuchsia-100"
+          className="h-10 rounded border border-fuchsia-400/35 bg-fuchsia-500/15 px-3 text-sm font-semibold text-fuchsia-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Cerrar
         </button>
@@ -244,109 +257,31 @@ export default function ControlPanel() {
         </div>
         <p className="mb-3 text-xs leading-5 text-slate-500">Define contrato, dirección, tipo, cantidad, vigencia y precio. Preview solo valida; Enviar paper transmite la orden después del control de riesgo.</p>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <Field label="Símbolo" help="Ticker del instrumento que se enviará a IBKR.">
-          <input
-            aria-label="Símbolo de orden IBKR"
-            title="Símbolo del instrumento que se enviará a IBKR."
-            value={orderSymbol}
-            onChange={(event) => setOrderSymbol(event.target.value.toUpperCase())}
-            className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"
-            placeholder="AAPL"
-          />
+          <Field label="Símbolo" help="Ticker exacto sin espacios, por ejemplo AAPL o SPY. Para índices usa el buscador de Automatización, que vincula símbolo y conid.">
+            <input aria-label="Símbolo de orden IBKR" title="Símbolo del instrumento que se enviará a IBKR." value={orderSymbol} onChange={(event) => setOrderSymbol(event.target.value.toUpperCase())} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none" placeholder="AAPL" />
           </Field>
           <Field label="Conid" help="Identificador único del contrato negociable en IBKR.">
-          <input
-            aria-label="Identificador de contrato IBKR"
-            title="Conid único del contrato negociable en IBKR."
-            value={orderConid}
-            onChange={(event) => setOrderConid(event.target.value)}
-            className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"
-            placeholder="265598"
-          />
+            <input aria-label="Identificador de contrato IBKR" title="Conid único del contrato negociable en IBKR." value={orderConid} onChange={(event) => setOrderConid(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none" placeholder="265598" />
           </Field>
           <Field label="Dirección" help="BUY compra unidades; SELL vende unidades disponibles.">
-          <select
-            aria-label="Dirección de orden IBKR"
-            title="Selecciona BUY para comprar o SELL para vender."
-            value={orderSide}
-            onChange={(event) => setOrderSide(event.target.value as "BUY" | "SELL")}
-            className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"
-          >
-            <option value="BUY">BUY</option>
-            <option value="SELL">SELL</option>
-          </select>
+            <select aria-label="Dirección de orden IBKR" title="Selecciona BUY para comprar o SELL para vender." value={orderSide} onChange={(event) => setOrderSide(event.target.value as "BUY" | "SELL")} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
           </Field>
           <Field label="Tipo de orden" help="LMT exige un precio límite; MKT usa el precio disponible.">
-          <select
-            aria-label="Tipo de orden IBKR"
-            title="LMT usa un precio límite; MKT está bloqueada por las reglas actuales."
-            value={orderType}
-            onChange={(event) => setOrderType(event.target.value as OrderType)}
-            className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"
-          >
-            <option value="LMT">LMT</option>
-            <option value="MKT">MKT</option>
-          </select>
+            <select aria-label="Tipo de orden IBKR" title="LMT usa un precio límite; MKT está bloqueada por las reglas actuales." value={orderType} onChange={(event) => setOrderType(event.target.value as OrderType)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"><option value="LMT">LMT</option><option value="MKT">MKT</option></select>
           </Field>
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-slate-300">Cantidad de la orden</span>
-            <span className="mb-2 block min-h-8 text-[11px] leading-4 text-slate-500">Número de unidades que se enviarán. Debe ser menor o igual al límite configurado en Riesgo.</span>
-            <input
-              aria-label="Cantidad de orden IBKR"
-              title="Número de unidades que intentará operar la orden."
-              value={orderQuantity}
-              onChange={(event) => setOrderQuantity(event.target.value)}
-              className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"
-              min="0"
-              placeholder="Cantidad"
-              step="1"
-              type="number"
-            />
-          </label>
+          <Field label="Cantidad de la orden" help="Número de unidades que se enviarán. Debe ser menor o igual al límite configurado en Riesgo.">
+            <input aria-label="Cantidad de orden IBKR" title="Número de unidades que intentará operar la orden." value={orderQuantity} onChange={(event) => setOrderQuantity(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none" min="0" placeholder="Cantidad" step="1" type="number" />
+          </Field>
           <Field label="Vigencia" help="DAY vence al cierre; GTC permanece; IOC cancela lo no ejecutado.">
-          <select
-            aria-label="Vigencia de orden IBKR"
-            title="DAY vence al cierre, GTC permanece activa e IOC cancela lo no ejecutado."
-            value={orderTif}
-            onChange={(event) => setOrderTif(event.target.value as TimeInForce)}
-            className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"
-          >
-            <option value="DAY">DAY</option>
-            <option value="GTC">GTC</option>
-            <option value="IOC">IOC</option>
-          </select>
+            <select aria-label="Vigencia de orden IBKR" title="DAY vence al cierre, GTC permanece activa e IOC cancela lo no ejecutado." value={orderTif} onChange={(event) => setOrderTif(event.target.value as TimeInForce)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"><option value="DAY">DAY</option><option value="GTC">GTC</option><option value="IOC">IOC</option></select>
           </Field>
           <Field label="Precio límite" help="Máximo de compra o mínimo de venta usado por una orden LMT.">
-          <input
-            aria-label="Precio límite de orden IBKR"
-            title="Precio máximo de compra o mínimo de venta para una orden LMT."
-            value={orderLimitPrice}
-            onChange={(event) => setOrderLimitPrice(event.target.value)}
-            className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={orderType === "MKT"}
-            placeholder="Limit price"
-          />
+            <input aria-label="Precio límite de orden IBKR" title="Precio máximo de compra o mínimo de venta para una orden LMT." value={orderLimitPrice} onChange={(event) => setOrderLimitPrice(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none disabled:cursor-not-allowed disabled:opacity-50" disabled={orderType === "MKT"} placeholder="Limit price" />
           </Field>
         </div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            aria-label="Previsualizar orden IBKR"
-            title="Valida riesgo y solicita una previsualización sin enviar la orden."
-            onClick={() => run("/api/trading/orders/preview", orderPayload())}
-            className="h-10 rounded border border-emerald-400/35 bg-emerald-500/15 px-3 text-sm font-semibold text-emerald-100"
-          >
-            Preview
-          </button>
-          <button
-            type="button"
-            aria-label="Enviar orden paper a IBKR"
-            title="Envía la orden a la cuenta paper después de validar el riesgo."
-            onClick={() => run("/api/trading/orders/submit", orderPayload())}
-            className="h-10 rounded border border-amber-400/35 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100"
-          >
-            Enviar paper
-          </button>
+          <button type="button" aria-label="Previsualizar orden IBKR" title={validOrder ? "Valida riesgo y solicita una previsualización sin enviar la orden." : "Usa un ticker exacto sin espacios y completa conid, cantidad y precio límite válidos."} disabled={busy || !validOrder} onClick={() => run("/api/trading/orders/preview", orderPayload())} className="h-10 rounded border border-emerald-400/35 bg-emerald-500/15 px-3 text-sm font-semibold text-emerald-100 disabled:cursor-not-allowed disabled:opacity-50">Preview</button>
+          <button type="button" aria-label="Enviar orden paper a IBKR" title={validOrder ? "Envía la orden a la cuenta paper después de validar el riesgo." : "Usa un ticker exacto sin espacios y completa conid, cantidad y precio límite válidos."} disabled={busy || !validOrder} onClick={() => run("/api/trading/orders/submit", orderPayload())} className="h-10 rounded border border-amber-400/35 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100 disabled:cursor-not-allowed disabled:opacity-50">Enviar paper</button>
         </div>
       </div>
 

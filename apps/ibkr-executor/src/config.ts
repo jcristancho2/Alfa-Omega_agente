@@ -1,5 +1,6 @@
 export const config = {
   allowLiveTrading: process.env.ALLOW_LIVE_TRADING === "true",
+  allowedSymbols: (process.env.ALLOWED_SYMBOLS ?? "").split(",").map((symbol) => symbol.trim().toUpperCase()).filter(Boolean),
   apiKey: process.env.EXECUTOR_API_KEY ?? "",
   autoConfirmWarnings: process.env.IBKR_AUTO_CONFIRM_WARNINGS === "true",
   baseUrl: process.env.IBKR_BASE_URL ?? "https://localhost:5000/v1/api",

@@ -5,7 +5,7 @@ import { operatorHeaders } from "@/lib/operator-api";
 
 type Broker = { id: "ibkr" | "simulated"; name: string };
 type Account = { accountId: string; displayName: string };
-type Instrument = { instrumentId: string; name: string; symbol: string; exchange: string; currency: string };
+type Instrument = { assetClass: string; instrumentId: string; name: string; symbol: string; exchange: string; currency: string; tradable?: boolean };
 type Row = { id: string; status: string; symbol: string; next_run_at?: string; timeframe?: string };
 type Capabilities = { automationEnabled: boolean; operatorAuthRequired: boolean; persistence: string };
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
@@ -16,8 +16,13 @@ async function api(path: string, init?: RequestInit) {
     ...init,
     headers: { "content-type": "application/json", ...authHeaders, ...(init?.headers ?? {}) }
   });
-  const json = await response.json().catch(() => ({})) as { data?: unknown; error?: unknown; risk?: { reason?: string } };
-  if (!response.ok) throw new Error(String(json.error ?? json.risk?.reason ?? "request failed"));
+  const json = await response.json().catch(() => ({})) as {
+    broker?: { error?: unknown };
+    data?: unknown;
+    error?: unknown;
+    risk?: { reason?: string };
+  };
+  if (!response.ok) throw new Error(String(json.error ?? json.risk?.reason ?? json.broker?.error ?? "request failed"));
   return json.data ?? json;
 }
 
@@ -38,6 +43,13 @@ export default function TradingAutomationPanel() {
   const [schedules, setSchedules] = useState<Row[]>([]);
   const [strategies, setStrategies] = useState<Row[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
+  const [busy, setBusy] = useState(false);
+  const numericValuesValid = [quantity, limitPrice, stopLoss, takeProfit].every((value) => Number(value) > 0);
+  const bracketPricesValid = side === "BUY"
+    ? Number(stopLoss) < Number(limitPrice) && Number(takeProfit) > Number(limitPrice)
+    : Number(stopLoss) > Number(limitPrice) && Number(takeProfit) < Number(limitPrice);
+  const instrumentTradable = instrument?.tradable !== false && instrument?.assetClass !== "IND";
+  const orderReady = Boolean(instrument && accountId && instrumentTradable) && numericValuesValid && bracketPricesValid;
 
   async function loadConfiguration() {
     try {
@@ -75,17 +87,35 @@ export default function TradingAutomationPanel() {
   }, [broker]);
 
   async function search() {
+    if (!query.trim() || busy) return;
+    setBusy(true);
     try {
       setInstruments(await api(`/api/brokers/${broker}/instruments/search?q=${encodeURIComponent(query)}`) as Instrument[]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "search failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function searchPreset(value: string) {
+    setQuery(value);
+    if (busy) return;
+    setBusy(true);
+    try {
+      setInstruments(await api(`/api/brokers/${broker}/instruments/search?q=${encodeURIComponent(value)}`) as Instrument[]);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "search failed");
+    } finally {
+      setBusy(false);
     }
   }
 
   function orderPayload() {
     if (!instrument || !accountId) throw new Error("Selecciona cuenta e instrumento");
     return {
-      accountId, accountMode: "paper", brokerId: broker, conid: Number(instrument.instrumentId),
+      accountId, accountMode: "paper", assetClass: instrument.assetClass, brokerId: broker,
+      conid: Number(instrument.instrumentId), currency: instrument.currency, exchange: instrument.exchange,
       instrumentId: instrument.instrumentId, limitPrice: Number(limitPrice), orderType: "LMT",
       quantity: Number(quantity), side, stopLoss: Number(stopLoss), symbol: instrument.symbol,
       takeProfit: Number(takeProfit), tif: "DAY"
@@ -93,6 +123,8 @@ export default function TradingAutomationPanel() {
   }
 
   async function send(path: string, body: Record<string, unknown>) {
+    if (busy) return;
+    setBusy(true);
     setMessage("Procesando...");
     try {
       await api(path, { body: JSON.stringify(body), method: "POST" });
@@ -100,6 +132,8 @@ export default function TradingAutomationPanel() {
       await loadConfiguration();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "request failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -153,14 +187,21 @@ export default function TradingAutomationPanel() {
           {accounts.map((item) => <option key={item.accountId} value={item.accountId}>{item.displayName}</option>)}
         </select>
         </Field>
-        <Field label="Instrumento" help="Símbolo o nombre para buscar contratos negociables.">
-        <input aria-label="Texto de búsqueda de instrumento" title="Escribe un símbolo o nombre para buscar contratos negociables." value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ejemplo: AAPL" className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm" />
+        <Field label="Instrumento o índice" help="Busca por símbolo o nombre: SPX, S&P 500, Nasdaq, Dow Jones, DAX, Nikkei o sus ETFs/futuros.">
+        <input aria-label="Texto de búsqueda de instrumento o índice" title="Escribe un símbolo o nombre de acción, ETF, futuro o índice bursátil." value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ejemplo: S&P 500, SPX, DAX" className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm" />
         </Field>
         <Field label="Buscar activos" help="Consulta los activos disponibles en el broker elegido.">
-        <button type="button" aria-label="Buscar instrumentos en el broker" title="Consulta instrumentos negociables disponibles en el broker seleccionado." onClick={search} className="h-10 w-full rounded border border-cyan-400/35 bg-cyan-500/15 text-sm font-semibold text-cyan-100">Buscar</button>
+        <button type="button" aria-label="Buscar instrumentos en el broker" title={query.trim() ? "Consulta instrumentos negociables disponibles en el broker seleccionado." : "Escribe un símbolo o nombre antes de buscar."} disabled={busy || !query.trim()} onClick={search} className="h-10 w-full rounded border border-cyan-400/35 bg-cyan-500/15 text-sm font-semibold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-50">Buscar</button>
         </Field>
       </div>
-      {instruments.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{instruments.slice(0, 9).map((item) => <button type="button" aria-label={`Seleccionar ${item.symbol}`} title={`Selecciona ${item.symbol} (${item.name}) para configurar la operación.`} key={item.instrumentId} onClick={() => setInstrument(item)} className={`rounded border px-3 py-2 text-left text-xs ${instrument?.instrumentId === item.instrumentId ? "border-emerald-400/50 bg-emerald-500/10" : "border-sky-400/15 bg-slate-950/50"}`}><strong>{item.symbol}</strong> · {item.name}<br/><span className="text-slate-500">{item.exchange} · {item.currency} · {item.instrumentId}</span></button>)}</div> : null}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {["S&P 500", "Nasdaq 100", "Dow Jones", "Russell 2000", "DAX", "FTSE 100", "Nikkei 225"].map((preset) => <button key={preset} type="button" disabled={busy} onClick={() => void searchPreset(preset)} title={`Busca ${preset} y los instrumentos relacionados disponibles en el broker.`} className="rounded border border-sky-400/20 bg-slate-950/60 px-2.5 py-1.5 text-xs text-slate-300 disabled:cursor-not-allowed disabled:opacity-50">{preset}</button>)}
+      </div>
+      {instruments.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{instruments.slice(0, 25).map((item) => {
+        const tradable = item.tradable !== false && item.assetClass !== "IND";
+        return <button type="button" aria-label={`Seleccionar ${item.symbol}`} title={tradable ? `Selecciona ${item.symbol} (${item.name}) para configurar la operación.` : `${item.symbol} es un índice de referencia no negociable directamente. Selecciona un ETF, futuro u opción relacionada.`} disabled={busy} key={item.instrumentId} onClick={() => setInstrument(item)} className={`rounded border px-3 py-2 text-left text-xs disabled:cursor-not-allowed disabled:opacity-50 ${instrument?.instrumentId === item.instrumentId ? "border-emerald-400/50 bg-emerald-500/10" : "border-sky-400/15 bg-slate-950/50"}`}><span className="flex items-start justify-between gap-2"><strong>{item.symbol}</strong><span className={tradable ? "text-emerald-300" : "text-amber-300"}>{item.assetClass || "N/D"} · {tradable ? "operable" : "referencia"}</span></span><span className="mt-1 block text-slate-300">{item.name}</span><span className="text-slate-500">{item.exchange} · {item.currency} · {item.instrumentId}</span></button>;
+      })}</div> : null}
+      {instrument && !instrumentTradable ? <p className="mt-3 rounded border border-amber-400/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">El índice {instrument.symbol} sirve como referencia y para consultar velas, pero no puede comprarse directamente. Busca y selecciona un ETF, futuro u opción que replique ese índice.</p> : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Field label="Dirección" help="BUY abre una compra; SELL abre una venta.">
         <select aria-label="Dirección de la orden bracket" title="BUY abre una compra; SELL abre una venta." value={side} onChange={(event) => setSide(event.target.value as "BUY" | "SELL")} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm"><option>BUY</option><option>SELL</option></select>
@@ -174,10 +215,10 @@ export default function TradingAutomationPanel() {
       </div>
       <p className="mt-4 text-xs leading-5 text-slate-500">Acciones: primero usa Preview bracket para validar precios y riesgo. Enviar transmite la orden paper; programar y EMA requieren persistencia Supabase.</p>
       <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <button type="button" aria-label="Previsualizar orden bracket" title="Valida entrada, stop loss, take profit y riesgo sin enviar la orden." onClick={() => safely(() => send("/api/trading/v2/orders/preview", orderPayload()))} className="h-10 rounded border border-emerald-400/35 bg-emerald-500/15 text-sm font-semibold">Preview bracket</button>
-        <button type="button" aria-label="Enviar orden bracket paper" title="Envía una entrada paper protegida con stop loss y take profit." onClick={() => safely(() => send("/api/trading/v2/orders/submit", orderPayload()))} className="h-10 rounded border border-amber-400/35 bg-amber-500/15 text-sm font-semibold">Enviar bracket paper</button>
-        <button type="button" aria-label="Crear programación diaria" title={capabilities?.automationEnabled ? "Programa esta orden para ejecutarse diariamente." : "Requiere configurar Supabase para guardar y ejecutar recurrencias."} onClick={createSchedule} className="h-10 rounded border border-sky-400/35 bg-sky-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50" disabled={!capabilities?.automationEnabled}>Programar diario</button>
-        <button type="button" aria-label="Crear estrategia EMA 9 21 de una hora" title={capabilities?.automationEnabled ? "Crea una estrategia que opera cruces EMA 9/21 en velas de una hora." : "Requiere configurar Supabase para guardar y evaluar estrategias."} onClick={createStrategy} className="h-10 rounded border border-fuchsia-400/35 bg-fuchsia-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50" disabled={!capabilities?.automationEnabled}>Crear EMA 9/21 · 1h</button>
+        <button type="button" aria-label="Previsualizar orden bracket" title={orderReady ? "Valida entrada, stop loss, take profit y riesgo sin enviar la orden." : !instrumentTradable ? "El índice seleccionado es solo referencia; selecciona un ETF, futuro u opción operable." : "Selecciona cuenta e instrumento y configura precios bracket coherentes."} disabled={busy || !orderReady} onClick={() => safely(() => send("/api/trading/v2/orders/preview", orderPayload()))} className="h-10 rounded border border-emerald-400/35 bg-emerald-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50">Preview bracket</button>
+        <button type="button" aria-label="Enviar orden bracket paper" title={orderReady ? "Envía una entrada paper protegida con stop loss y take profit." : "Selecciona cuenta e instrumento y configura precios bracket coherentes."} disabled={busy || !orderReady} onClick={() => safely(() => send("/api/trading/v2/orders/submit", orderPayload()))} className="h-10 rounded border border-amber-400/35 bg-amber-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50">Enviar bracket paper</button>
+        <button type="button" aria-label="Crear programación diaria" title={!capabilities?.automationEnabled ? "Requiere configurar Supabase para guardar y ejecutar recurrencias." : orderReady ? "Programa esta orden para ejecutarse diariamente." : "Completa una orden válida antes de programarla."} onClick={createSchedule} className="h-10 rounded border border-sky-400/35 bg-sky-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || !capabilities?.automationEnabled || !orderReady}>Programar diario</button>
+        <button type="button" aria-label="Crear estrategia EMA 9 21 de una hora" title={!capabilities?.automationEnabled ? "Requiere configurar Supabase para guardar y evaluar estrategias." : orderReady ? "Crea una estrategia que opera cruces EMA 9/21 en velas de una hora." : "Completa una orden válida antes de crear la estrategia."} onClick={createStrategy} className="h-10 rounded border border-fuchsia-400/35 bg-fuchsia-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || !capabilities?.automationEnabled || !orderReady}>Crear EMA 9/21 · 1h</button>
       </div>
       {!capabilities?.automationEnabled ? <p className="mt-2 text-xs text-amber-300">Recurrencias y estrategias están desactivadas hasta configurar Supabase; búsqueda y órdenes bracket funcionan en modo local.</p> : null}
       <div className="mt-4 grid gap-3 lg:grid-cols-2">

@@ -14,11 +14,11 @@ const items = [
   { href: "/logs", label: "Logs", help: "Revisa la auditoría y los eventos internos." }
 ];
 
-export default function DashboardNav() {
+export default function DashboardNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Vistas de la aplicación" className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-2 lg:overflow-visible lg:pb-0">
+    <nav aria-label="Vistas de la aplicación" className="space-y-2">
       {items.map((item) => {
         const active = pathname === item.href;
         return (
@@ -27,10 +27,11 @@ export default function DashboardNav() {
             href={item.href}
             aria-current={active ? "page" : undefined}
             title={item.help}
+            onClick={onNavigate}
             className={
               active
-                ? "min-w-max rounded-md border border-sky-400/25 bg-sky-500/15 px-3 py-2.5 text-sm font-medium text-sky-100"
-                : "min-w-max rounded-md px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-sky-500/10 hover:text-sky-100"
+                ? "block rounded-md border border-sky-400/25 bg-sky-500/15 px-3 py-2.5 text-sm font-medium text-sky-100"
+                : "block rounded-md px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-sky-500/10 hover:text-sky-100"
             }
           >
             <span className="flex items-center justify-between gap-3">

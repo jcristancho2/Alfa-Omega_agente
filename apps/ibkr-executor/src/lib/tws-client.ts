@@ -20,7 +20,10 @@ type TwsAction =
 interface TwsPayload {
   accountId?: string;
   action: TwsAction;
+  assetClass?: string;
   conid?: number;
+  currency?: string;
+  exchange?: string;
   limitPrice?: number;
   orderId?: string;
   orderType?: string;
@@ -103,7 +106,10 @@ export function previewTwsOrder(accountId: string, order: Record<string, unknown
   return runTwsBridge({
     accountId,
     action: "preview",
+    assetClass: String(order.assetClass ?? "STK"),
     conid: Number(order.conid),
+    currency: String(order.currency ?? "USD"),
+    exchange: String(order.exchange ?? "SMART"),
     limitPrice: Number(order.price),
     orderType: String(order.orderType),
     quantity: Number(order.quantity),
@@ -117,7 +123,10 @@ export function placeTwsOrder(accountId: string, order: Record<string, unknown>)
   return runTwsBridge({
     accountId,
     action: "place",
+    assetClass: String(order.assetClass ?? "STK"),
     conid: Number(order.conid),
+    currency: String(order.currency ?? "USD"),
+    exchange: String(order.exchange ?? "SMART"),
     limitPrice: Number(order.price),
     orderType: String(order.orderType),
     quantity: Number(order.quantity),

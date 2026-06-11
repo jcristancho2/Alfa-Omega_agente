@@ -68,8 +68,11 @@ const TradingOrderSchema = z.object({
 const GatewayOrderSchema = z.object({
   accountId: z.string().min(1),
   accountMode: z.literal("paper").default("paper"),
+  assetClass: z.string().default("STK"),
   brokerId: z.enum(["ibkr", "simulated"]),
   conid: z.number().int().positive().optional(),
+  currency: z.string().default("USD"),
+  exchange: z.string().default("SMART"),
   idempotencyKey: z.string().optional(),
   instrumentId: z.string().min(1),
   limitPrice: z.number().positive(),
@@ -118,6 +121,7 @@ const StrategySchema = z.object({
 });
 
 const RiskSettingsSchema = z.object({
+  allowedSymbols: z.array(z.string().trim().min(1)).max(500).default(allowedSymbols).transform((symbols) => [...new Set(symbols.map((symbol) => symbol.toUpperCase()))]),
   maxDailyRiskPct: z.number().positive().max(1),
   maxDailyTrades: z.number().int().positive().max(10000),
   maxOpenTrades: z.number().int().positive().max(1000),
@@ -129,6 +133,7 @@ const RiskSettingsSchema = z.object({
 type RiskSettings = z.infer<typeof RiskSettingsSchema>;
 
 const defaultRiskSettings: RiskSettings = {
+  allowedSymbols,
   maxDailyRiskPct,
   maxDailyTrades,
   maxOpenTrades,
@@ -404,7 +409,8 @@ async function syncExecutorRiskSettings(settings: RiskSettings) {
     body: JSON.stringify({
       maxDailyTrades: settings.maxDailyTrades,
       maxOrderNotional: settings.maxOrderNotional,
-      maxOrderQty: settings.maxOrderQty
+      maxOrderQty: settings.maxOrderQty,
+      allowedSymbols: settings.allowedSymbols
     }),
     headers: {
       "content-type": "application/json",
@@ -477,7 +483,7 @@ async function handleLocalTradingOrder(
   const decision = validateOrderRisk({
     ...input,
     allowLiveTrading: false,
-    allowedSymbols: allowedSymbols.length ? allowedSymbols : undefined,
+    allowedSymbols: limits.allowedSymbols.length ? limits.allowedSymbols : undefined,
     dailyTrades,
     killSwitch: db.bot_status.status === "risk_locked",
     maxDailyTrades: limits.maxDailyTrades,
@@ -1178,7 +1184,8 @@ app.post("/api/risk/settings", async (c) => {
       body: JSON.stringify({
         maxDailyTrades: parsed.data.maxDailyTrades,
         maxOrderNotional: parsed.data.maxOrderNotional,
-        maxOrderQty: parsed.data.maxOrderQty
+        maxOrderQty: parsed.data.maxOrderQty,
+        allowedSymbols: parsed.data.allowedSymbols
       }),
       headers: {
         "content-type": "application/json",
@@ -1215,7 +1222,7 @@ async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<T
   const decision = validateOrderRisk({
     ...parsed.data,
     allowLiveTrading: apiAllowLiveTrading && runtime.allow_live_trading,
-    allowedSymbols: allowedSymbols.length ? allowedSymbols : undefined,
+    allowedSymbols: limits.allowedSymbols.length ? limits.allowedSymbols : undefined,
     dailyTrades,
     killSwitch: runtime.kill_switch,
     maxDailyTrades: limits.maxDailyTrades,
@@ -1479,6 +1486,7 @@ app.post("/api/trading/v2/orders/:action", async (c) => {
   const decision = validateOrderRisk({
     ...input,
     allowLiveTrading: false,
+    allowedSymbols: limits.allowedSymbols.length ? limits.allowedSymbols : undefined,
     conid: input.conid ?? Number(input.instrumentId),
     dailyTrades: client ? await countDailyOrders(client) : 0,
     idempotencyKeyExists: duplicate,

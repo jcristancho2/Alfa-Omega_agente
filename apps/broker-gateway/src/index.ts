@@ -27,7 +27,15 @@ const brokers = [
 const simulatedInstruments: BrokerInstrument[] = [
   { assetClass: "STK", brokerId: "simulated", currency: "USD", exchange: "SIM", instrumentId: "265598", minTick: 0.01, name: "Apple Inc.", symbol: "AAPL" },
   { assetClass: "STK", brokerId: "simulated", currency: "USD", exchange: "SIM", instrumentId: "272093", minTick: 0.01, name: "Microsoft Corp.", symbol: "MSFT" },
-  { assetClass: "STK", brokerId: "simulated", currency: "USD", exchange: "SIM", instrumentId: "76792991", minTick: 0.01, name: "Tesla Inc.", symbol: "TSLA" }
+  { assetClass: "STK", brokerId: "simulated", currency: "USD", exchange: "SIM", instrumentId: "76792991", minTick: 0.01, name: "Tesla Inc.", symbol: "TSLA" },
+  { assetClass: "IND", brokerId: "simulated", currency: "USD", exchange: "CBOE", instrumentId: "416904", name: "S&P 500 Index", symbol: "SPX", tradable: false },
+  { assetClass: "ETF", brokerId: "simulated", currency: "USD", exchange: "ARCA", instrumentId: "756733", minTick: 0.01, name: "SPDR S&P 500 ETF Trust", symbol: "SPY", tradable: true },
+  { assetClass: "ETF", brokerId: "simulated", currency: "USD", exchange: "NASDAQ", instrumentId: "320227571", minTick: 0.01, name: "Invesco QQQ Nasdaq 100 ETF", symbol: "QQQ", tradable: true },
+  { assetClass: "ETF", brokerId: "simulated", currency: "USD", exchange: "ARCA", instrumentId: "225815195", minTick: 0.01, name: "iShares Russell 2000 ETF", symbol: "IWM", tradable: true },
+  { assetClass: "ETF", brokerId: "simulated", currency: "USD", exchange: "ARCA", instrumentId: "23960192", minTick: 0.01, name: "SPDR Dow Jones Industrial Average ETF", symbol: "DIA", tradable: true },
+  { assetClass: "ETF", brokerId: "simulated", currency: "EUR", exchange: "IBIS", instrumentId: "200001", minTick: 0.01, name: "iShares Core DAX ETF", symbol: "EXS1", tradable: true },
+  { assetClass: "ETF", brokerId: "simulated", currency: "GBP", exchange: "LSE", instrumentId: "200002", minTick: 0.01, name: "iShares Core FTSE 100 ETF", symbol: "ISF", tradable: true },
+  { assetClass: "ETF", brokerId: "simulated", currency: "USD", exchange: "ARCA", instrumentId: "200003", minTick: 0.01, name: "iShares MSCI Japan ETF Nikkei", symbol: "EWJ", tradable: true }
 ];
 const simulatedOrders = new Map<string, BrokerOrder>();
 let simulatedOrderSequence = 1000;
@@ -35,8 +43,11 @@ let simulatedOrderSequence = 1000;
 const OrderSchema = z.object({
   accountId: z.string().min(1),
   accountMode: z.literal("paper").default("paper"),
+  assetClass: z.string().default("STK"),
   brokerId: z.enum(["ibkr", "simulated"]).optional(),
   conid: z.number().int().positive().optional(),
+  currency: z.string().default("USD"),
+  exchange: z.string().default("SMART"),
   idempotencyKey: z.string().optional(),
   instrumentId: z.string().min(1),
   limitPrice: z.number().positive().optional(),
@@ -144,8 +155,9 @@ app.get("/brokers/:brokerId/instruments/search", async (c) => {
   const query = (c.req.query("q") ?? "").trim();
   if (!query) return c.json({ ok: true, data: [] });
   if (id === "simulated") {
-    const needle = query.toLowerCase();
-    return c.json({ ok: true, data: simulatedInstruments.filter((item) => `${item.symbol} ${item.name}`.toLowerCase().includes(needle)) });
+    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const needle = normalize(query);
+    return c.json({ ok: true, data: simulatedInstruments.filter((item) => normalize(`${item.symbol} ${item.name}`).includes(needle)) });
   }
   return c.json({ ok: true, data: extractData(await executor(`/instruments/search?q=${encodeURIComponent(query)}`)).instruments ?? [] });
 });

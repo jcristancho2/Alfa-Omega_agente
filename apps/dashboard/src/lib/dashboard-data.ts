@@ -43,6 +43,7 @@ export type DashboardData = {
 };
 
 const defaultRiskSettings: RiskSettings = {
+  allowedSymbols: [],
   maxDailyRiskPct: 0.03,
   maxDailyTrades: 20,
   maxOpenTrades: 3,
@@ -136,6 +137,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       const execution: Row = item.execution ?? (item as unknown as Row);
       return [
         asText(execution.time ?? item.time).slice(0, 19),
+        numberValue(execution.orderId ?? execution.order_id),
         asText(item.contract?.symbol ?? execution.symbol),
         asText(execution.side),
         numberValue(execution.shares),

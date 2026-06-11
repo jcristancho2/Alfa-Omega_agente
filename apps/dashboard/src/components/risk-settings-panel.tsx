@@ -4,6 +4,7 @@ import { useState } from "react";
 import { operatorHeaders } from "@/lib/operator-api";
 
 export interface RiskSettings {
+  allowedSymbols: string[];
   maxDailyRiskPct: number;
   maxDailyTrades: number;
   maxOpenTrades: number;
@@ -30,13 +31,21 @@ const fields: Array<{
 
 export default function RiskSettingsPanel({ initial }: { initial: RiskSettings }) {
   const [settings, setSettings] = useState(initial);
+  const [allowedSymbolsText, setAllowedSymbolsText] = useState(initial.allowedSymbols.join(", "));
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const settingsValid = fields.every((field) => Number(settings[field.key]) > 0);
 
   async function save() {
+    if (saving || !settingsValid) return;
+    setSaving(true);
     setMessage("Guardando...");
     try {
       const response = await fetch(`${apiBaseUrl}/api/risk/settings`, {
-        body: JSON.stringify(settings),
+        body: JSON.stringify({
+          ...settings,
+          allowedSymbols: [...new Set(allowedSymbolsText.split(",").map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))]
+        }),
         headers: { "content-type": "application/json", ...(await operatorHeaders()) },
         method: "POST"
       });
@@ -45,6 +54,8 @@ export default function RiskSettingsPanel({ initial }: { initial: RiskSettings }
       setMessage("Límites actualizados. Se aplican a las próximas órdenes.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo guardar");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -72,15 +83,29 @@ export default function RiskSettingsPanel({ initial }: { initial: RiskSettings }
           </label>
         ))}
       </div>
+      <label className="mt-4 block">
+        <span className="mb-1 block text-xs font-semibold text-slate-300">Símbolos permitidos</span>
+        <span className="mb-2 block text-[11px] leading-4 text-slate-500">Lista separada por comas. Ejemplo: AAPL, MSFT, TSLA. Déjala vacía para permitir cualquier símbolo.</span>
+        <textarea
+          aria-label="Símbolos permitidos para operar"
+          title="Solo los símbolos incluidos podrán superar la validación allowed_symbols."
+          value={allowedSymbolsText}
+          onChange={(event) => setAllowedSymbolsText(event.target.value)}
+          placeholder="AAPL, MSFT, TSLA"
+          rows={3}
+          className="w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 py-2 text-sm uppercase"
+        />
+      </label>
       <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
         <button
           type="button"
           aria-label="Guardar límites de riesgo"
           title="Guarda y aplica inmediatamente los límites configurados."
+          disabled={saving || !settingsValid}
           onClick={save}
-          className="rounded border border-rose-400/35 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100"
+          className="rounded border border-rose-400/35 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Guardar límites
+          {saving ? "Guardando..." : "Guardar límites"}
         </button>
         <p className="text-xs text-slate-400">{message}</p>
       </div>

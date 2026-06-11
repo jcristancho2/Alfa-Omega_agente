@@ -30,6 +30,7 @@ export interface BrokerInstrument {
   minTick?: number;
   name: string;
   symbol: string;
+  tradable?: boolean;
 }
 
 export interface Candle {

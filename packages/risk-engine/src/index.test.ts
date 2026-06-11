@@ -79,4 +79,14 @@ describe("validateOrderRisk", () => {
     const decision = validateOrderRisk({ ...baseOrder, stopLoss: 95, takeProfit: 110 });
     expect(decision.passed).toBe(true);
   });
+
+  it("accepts allowed symbols without case sensitivity", () => {
+    const decision = validateOrderRisk({ ...baseOrder, allowedSymbols: ["aapl"] });
+    expect(decision.passed).toBe(true);
+  });
+
+  it("rejects symbols outside the configured list", () => {
+    const decision = validateOrderRisk({ ...baseOrder, allowedSymbols: ["MSFT"] });
+    expect(decision.rule).toBe("allowed_symbols");
+  });
 });

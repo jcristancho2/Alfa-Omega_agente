@@ -14,7 +14,7 @@ interface HistoryTabsProps {
 
 const brokerHeaders = ["Order ID", "Instrumento", "Dirección", "Cantidad", "Límite", "Estado", "Restante"];
 const brokerHeadersWithActions = [...brokerHeaders, ""];
-const executionHeaders = ["Hora", "Instrumento", "Dirección", "Cantidad", "Precio", "Exchange"];
+const executionHeaders = ["Hora", "Order ID", "Instrumento", "Dirección", "Cantidad", "Precio", "Exchange"];
 const positionHeaders = ["Instrumento", "Posición", "Precio mercado", "Costo prom.", "PnL no realizado", "PnL realizado"];
 const signalHeaders = ["Hora", "Instrumento", "Dirección", "Score", "Estrategia", "Estado"];
 const tradeHeaders = ["Instrumento", "Dirección", "Entrada", "Salida", "PnL", "Estado"];
@@ -104,8 +104,31 @@ function BrokerOrdersTable({
   onCancel: (orderId: string) => void;
   rows: string[][];
 }) {
+  const cancellableStatuses = ["ApiPending", "PendingSubmit", "PreSubmitted", "Submitted"];
   return (
-    <div className="overflow-x-auto">
+    <>
+      <div className="space-y-2 p-3 md:hidden">
+        {rows.length ? rows.map((row, rowIndex) => {
+          const orderId = row[0];
+          const canCancel = cancellableStatuses.includes(row[5]);
+          return (
+            <article key={`${row.join("-")}-${rowIndex}`} className="rounded border border-sky-400/10 bg-slate-950/45 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div><p className="font-semibold text-slate-100">{row[1]} · {row[2]}</p><p className="mt-1 font-mono text-[11px] text-slate-500">Order ID {orderId}</p></div>
+                <span className={`text-xs font-semibold ${statusTone(row[5])}`}>{row[5]}</span>
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div><dt className="text-slate-500">Cantidad</dt><dd className="mt-1 text-slate-200">{row[3]}</dd></div>
+                <div><dt className="text-slate-500">Restante</dt><dd className="mt-1 text-slate-200">{row[6]}</dd></div>
+                <div><dt className="text-slate-500">Precio límite</dt><dd className="mt-1 text-slate-200">{row[4]}</dd></div>
+                <div><dt className="text-slate-500">Acción disponible</dt><dd className="mt-1 text-slate-200">{canCancel ? "Cancelar" : "Solo consulta"}</dd></div>
+              </dl>
+              <button type="button" disabled={!canCancel || cancellingOrderId === orderId} onClick={() => onCancel(orderId)} title={canCancel ? `Cancela la orden abierta ${orderId}.` : "Esta orden ya no admite cancelación."} className="mt-3 h-10 w-full rounded border border-rose-400/35 bg-rose-500/10 text-xs font-semibold text-rose-100 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-900/50 disabled:text-slate-600">{cancellingOrderId === orderId ? "Cancelando" : "Cancelar orden"}</button>
+            </article>
+          );
+        }) : <p className="py-5 text-center text-xs text-slate-500">No hay órdenes en curso.</p>}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[760px] text-left text-xs">
         <thead className="bg-slate-950/70 text-slate-500">
           <tr>
@@ -121,7 +144,7 @@ function BrokerOrdersTable({
             rows.map((row, rowIndex) => {
               const orderId = row[0];
               const status = row[5];
-              const canCancel = status === "Submitted" || status === "PreSubmitted";
+              const canCancel = cancellableStatuses.includes(status);
               return (
                 <tr key={`${row.join("-")}-${rowIndex}`} className="border-t border-sky-400/10">
                   {row.map((cell, index) => (
@@ -166,7 +189,8 @@ function BrokerOrdersTable({
           )}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -184,15 +208,16 @@ export default function HistoryTabs({
   const [cancelMessage, setCancelMessage] = useState("");
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const tabs = [
-    { id: "broker" as const, label: "IBKR Paper", count: brokerRows.length },
+    { id: "broker" as const, label: "En curso", count: brokerRows.length },
     { id: "positions" as const, label: "Posiciones", count: positionRows.length },
-    { id: "executions" as const, label: "Ejecuciones", count: executionRows.length },
+    { id: "executions" as const, label: "Historial broker", count: executionRows.length },
     { id: "signals" as const, label: "Señales", count: signalRows.length },
     { id: "trades" as const, label: "Operaciones", count: tradeRows.length }
   ];
 
   async function cancelOrder(orderId: string) {
     if (!orderId || orderId === "-") return;
+    if (!window.confirm(`¿Cancelar la orden ${orderId}? El broker rechazará la cancelación si ya fue ejecutada.`)) return;
     setCancellingOrderId(orderId);
     setCancelMessage("");
     try {
@@ -215,8 +240,9 @@ export default function HistoryTabs({
     <section className="overflow-hidden rounded-md border border-sky-400/15 bg-[#07111f]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sky-400/10 px-4 py-3">
         <div>
-          <h2 className="text-base font-semibold">Histórico</h2>
-          <p className="min-h-4 font-mono text-[11px] text-slate-500">{cancelMessage}</p>
+          <h2 className="text-base font-semibold">Estado e historial de operaciones</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">En curso refleja órdenes abiertas del broker. Historial broker muestra únicamente ejecuciones confirmadas.</p>
+          <p className="mt-1 min-h-4 font-mono text-[11px] text-slate-400">{cancelMessage}</p>
         </div>
         <div className="grid grid-cols-2 gap-1 rounded border border-sky-400/15 bg-slate-950/70 p-1 sm:grid-cols-5">
           {tabs.map((tab) => (
@@ -249,7 +275,7 @@ export default function HistoryTabs({
         <DenseTable headers={positionHeaders} rows={positionRows} />
       ) : null}
       {activeTab === "executions" ? (
-        <DenseTable directionIndex={2} headers={executionHeaders} rows={executionRows} statusIndex={-1} />
+        <DenseTable directionIndex={3} headers={executionHeaders} rows={executionRows} statusIndex={-1} />
       ) : null}
       {activeTab === "signals" ? (
         <DenseTable directionIndex={2} headers={signalHeaders} rows={signalRows} />
