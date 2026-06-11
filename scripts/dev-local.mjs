@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { isAbsolute, resolve } from "node:path";
 
-const includeBroker = process.argv.includes("--broker");
+const skipExecutor = process.argv.includes("--no-executor");
 
 const defaults = {
   API_PORT: "4000",
@@ -17,6 +17,9 @@ const env = { ...defaults, ...process.env };
 env.LOCAL_DB_PATH = isAbsolute(env.LOCAL_DB_PATH)
   ? env.LOCAL_DB_PATH
   : resolve(process.cwd(), env.LOCAL_DB_PATH);
+
+const includeExecutor =
+  !skipExecutor && (env.IBKR_CONNECTION_MODE === "tws" || Boolean(env.IBKR_ACCOUNT_ID));
 
 const services = [
   {
@@ -36,7 +39,35 @@ const services = [
     command: "bun",
     args: ["--cwd", "apps/notification-worker", "dev"],
     color: "\x1b[33m"
-  },
+  }
+];
+
+services.push({
+  name: "broker",
+  command: "bun",
+  args: ["--cwd", "apps/broker-gateway", "dev"],
+  color: "\x1b[34m"
+});
+
+if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+  services.push({
+    name: "orchestrator",
+    command: "bun",
+    args: ["--cwd", "apps/trading-orchestrator", "dev"],
+    color: "\x1b[94m"
+  });
+}
+
+if (includeExecutor) {
+  services.push({
+    name: "ibkr",
+    command: "bun",
+    args: ["--cwd", "apps/ibkr-executor", "dev"],
+    color: "\x1b[96m"
+  });
+}
+
+services.push(
   {
     name: "dashboard",
     command: "bun",
@@ -52,16 +83,7 @@ const services = [
     ],
     color: "\x1b[32m"
   }
-];
-
-if (includeBroker) {
-  services.push({
-    name: "broker",
-    command: "bun",
-    args: ["--cwd", "apps/broker-gateway", "dev"],
-    color: "\x1b[34m"
-  });
-}
+);
 
 const reset = "\x1b[0m";
 const children = new Map();
@@ -124,6 +146,7 @@ console.log("ALFA-OMEGA local dev");
 console.log(`API:       ${env.API_BASE_URL}`);
 console.log(`Dashboard: http://localhost:${env.DASHBOARD_PORT}`);
 console.log(`DB:        ${env.LOCAL_DB_PATH}`);
+console.log(`IBKR:      ${includeExecutor ? `http://localhost:${env.PORT || "8080"}` : "disabled"}`);
 console.log(`Mode:      ${env.TRADING_MODE}`);
 console.log("Stop:      Ctrl+C\n");
 

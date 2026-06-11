@@ -1,0 +1,162 @@
+import type { RiskSettings } from "@/components/risk-settings-panel";
+
+type ApiResult<T> = { ok: boolean; data: T };
+export type Row = Record<string, unknown>;
+
+type BrokerOpenOrder = {
+  contract?: Row;
+  order?: Row;
+  orderStatus?: Row;
+};
+
+type BrokerPortfolioItem = {
+  account?: string;
+  averageCost?: number;
+  avgCost?: number;
+  contract?: Row;
+  marketPrice?: number;
+  position?: number;
+  realizedPNL?: number;
+  unrealizedPNL?: number;
+};
+
+type BrokerExecutionItem = {
+  contract?: Row;
+  execution?: Row;
+  time?: string;
+};
+
+export type DashboardData = {
+  availableBrokers: Array<{ id: string; name: string }>;
+  brokerMode: string;
+  brokerOnline: boolean;
+  brokerRows: string[][];
+  executionRows: string[][];
+  logs: Row[];
+  notifications: Row[];
+  positionRows: string[][];
+  risk: Row | null;
+  riskSettings: RiskSettings;
+  signals: Row[];
+  status: Row | null;
+  trades: Row[];
+};
+
+const defaultRiskSettings: RiskSettings = {
+  maxDailyRiskPct: 0.03,
+  maxDailyTrades: 20,
+  maxOpenTrades: 3,
+  maxOrderNotional: 5000,
+  maxOrderQty: 10,
+  riskPerTradePct: 0.01
+};
+
+export async function getJson<T>(path: string): Promise<T | null> {
+  const baseUrl = process.env.API_BASE_URL || "http://localhost:4000";
+  try {
+    const res = await fetch(`${baseUrl}${path}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const json = (await res.json()) as ApiResult<T>;
+    return json.data;
+  } catch {
+    return null;
+  }
+}
+
+export function asNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+export function asText(value: unknown, fallback = "-") {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+export function money(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
+export function numberValue(value: unknown) {
+  const numeric = asNumber(value, Number.NaN);
+  return Number.isFinite(numeric)
+    ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(numeric)
+    : "-";
+}
+
+export async function loadDashboardData(): Promise<DashboardData> {
+  const [
+    status,
+    signals,
+    trades,
+    risk,
+    brokerOrdersData,
+    brokerPortfolioData,
+    brokerExecutionsData,
+    availableBrokers,
+    notifications,
+    logs,
+    riskSettings
+  ] = await Promise.all([
+    getJson<Row>("/status"),
+    getJson<Row[]>("/signals"),
+    getJson<Row[]>("/trades"),
+    getJson<Row>("/risk"),
+    getJson<{ mode?: string; orders?: BrokerOpenOrder[] }>("/api/trading/orders/open"),
+    getJson<{ portfolio?: BrokerPortfolioItem[]; positions?: BrokerPortfolioItem[] }>("/api/trading/portfolio"),
+    getJson<{ executions?: BrokerExecutionItem[] }>("/api/trading/executions"),
+    getJson<Array<{ id: string; name: string }>>("/api/brokers"),
+    getJson<Row[]>("/notifications"),
+    getJson<Row[]>("/logs"),
+    getJson<RiskSettings>("/api/risk/settings")
+  ]);
+
+  const brokerOrders = brokerOrdersData?.orders ?? [];
+  const positions = brokerPortfolioData?.portfolio?.length
+    ? brokerPortfolioData.portfolio
+    : (brokerPortfolioData?.positions ?? []);
+  const executions = brokerExecutionsData?.executions ?? [];
+
+  return {
+    availableBrokers: availableBrokers ?? [],
+    brokerMode: brokerOrdersData?.mode ?? "paper",
+    brokerOnline: Boolean(brokerOrdersData || availableBrokers?.length),
+    brokerRows: brokerOrders.slice(0, 30).map((order) => [
+      numberValue(order.order?.orderId),
+      asText(order.contract?.symbol),
+      asText(order.order?.action),
+      numberValue(order.order?.totalQuantity),
+      numberValue(order.order?.lmtPrice),
+      asText(order.orderStatus?.status),
+      numberValue(order.orderStatus?.remaining)
+    ]),
+    executionRows: executions.slice(0, 30).map((item) => {
+      const execution: Row = item.execution ?? (item as unknown as Row);
+      return [
+        asText(execution.time ?? item.time).slice(0, 19),
+        asText(item.contract?.symbol ?? execution.symbol),
+        asText(execution.side),
+        numberValue(execution.shares),
+        money(asNumber(execution.price)),
+        asText(execution.exchange)
+      ];
+    }),
+    logs: logs ?? [],
+    notifications: notifications ?? [],
+    positionRows: positions.slice(0, 30).map((position) => [
+      asText(position.contract?.symbol),
+      numberValue(position.position),
+      money(asNumber(position.marketPrice)),
+      money(asNumber(position.averageCost ?? position.avgCost)),
+      money(asNumber(position.unrealizedPNL)),
+      money(asNumber(position.realizedPNL))
+    ]),
+    risk,
+    riskSettings: riskSettings ?? defaultRiskSettings,
+    signals: signals ?? [],
+    status,
+    trades: trades ?? []
+  };
+}

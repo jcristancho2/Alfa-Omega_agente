@@ -6,11 +6,16 @@ type TwsAction =
   | "authStatus"
   | "cancel"
   | "executions"
+  | "historicalData"
   | "marketdata"
   | "openOrders"
+  | "orderStatus"
   | "place"
+  | "placeBracket"
   | "portfolio"
-  | "preview";
+  | "preview"
+  | "previewBracket"
+  | "searchInstruments";
 
 interface TwsPayload {
   accountId?: string;
@@ -23,6 +28,10 @@ interface TwsPayload {
   side?: string;
   symbol?: string;
   tif?: string;
+  timeframe?: string;
+  limit?: number;
+  orders?: Record<string, unknown>[];
+  query?: string;
 }
 
 async function runTwsBridge(payload: TwsPayload) {
@@ -82,6 +91,14 @@ export function getTwsMarketDataSnapshot(conid: string) {
   return runTwsBridge({ action: "marketdata", conid: Number(conid) });
 }
 
+export function searchTwsInstruments(query: string) {
+  return runTwsBridge({ action: "searchInstruments", query });
+}
+
+export function getTwsHistoricalData(conid: string, timeframe: string, limit: number) {
+  return runTwsBridge({ action: "historicalData", conid: Number(conid), timeframe, limit });
+}
+
 export function previewTwsOrder(accountId: string, order: Record<string, unknown>) {
   return runTwsBridge({
     accountId,
@@ -110,8 +127,20 @@ export function placeTwsOrder(accountId: string, order: Record<string, unknown>)
   });
 }
 
+export function previewTwsBracketOrder(accountId: string, orders: Record<string, unknown>[]) {
+  return runTwsBridge({ accountId, action: "previewBracket", orders });
+}
+
+export function placeTwsBracketOrder(accountId: string, orders: Record<string, unknown>[]) {
+  return runTwsBridge({ accountId, action: "placeBracket", orders });
+}
+
 export function getTwsOpenOrders() {
   return runTwsBridge({ action: "openOrders" });
+}
+
+export function getTwsOrderStatus(orderId: string) {
+  return runTwsBridge({ action: "orderStatus", orderId });
 }
 
 export function getTwsPortfolio() {

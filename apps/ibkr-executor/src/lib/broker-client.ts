@@ -4,13 +4,18 @@ import {
   getAccounts,
   getAuthStatus,
   getExecutions,
+  getHistoricalData,
   getMarketDataSnapshot,
   getOpenOrders,
+  getOrderStatus,
   getPortfolio,
   initializeBrokerageSession,
   placeOrder,
+  placeBracketOrder,
+  previewBracketOrder,
   previewOrder,
   replyToOrderWarning,
+  searchInstruments,
   tickle
 } from "./ibkr-client";
 import {
@@ -18,11 +23,16 @@ import {
   getTwsAccounts,
   getTwsAuthStatus,
   getTwsExecutions,
+  getTwsHistoricalData,
   getTwsMarketDataSnapshot,
   getTwsOpenOrders,
+  getTwsOrderStatus,
   getTwsPortfolio,
+  placeTwsBracketOrder,
   placeTwsOrder,
-  previewTwsOrder
+  previewTwsBracketOrder,
+  previewTwsOrder,
+  searchTwsInstruments
 } from "./tws-client";
 
 function isTwsMode() {
@@ -49,6 +59,28 @@ export function getBrokerMarketDataSnapshot(conid: string) {
   return isTwsMode() ? getTwsMarketDataSnapshot(conid) : getMarketDataSnapshot(conid);
 }
 
+export function searchBrokerInstruments(query: string) {
+  return isTwsMode() ? searchTwsInstruments(query) : searchInstruments(query);
+}
+
+export function getBrokerHistoricalData(conid: string, timeframe: string, limit: number) {
+  const cpapiBars: Record<string, string> = {
+    "1m": "1min",
+    "5m": "5min",
+    "15m": "15min",
+    "1h": "1h",
+    "4h": "4h",
+    "1d": "1d"
+  };
+  return isTwsMode()
+    ? getTwsHistoricalData(conid, timeframe, limit)
+    : getHistoricalData(
+        conid,
+        timeframe === "1d" ? `${Math.max(limit, 2)}d` : timeframe === "4h" || timeframe === "1h" ? "30d" : "1d",
+        cpapiBars[timeframe] ?? "1h"
+      );
+}
+
 export function previewBrokerOrder(accountId: string, order: Record<string, unknown>) {
   return isTwsMode() ? previewTwsOrder(accountId, order) : previewOrder(accountId, order);
 }
@@ -57,8 +89,20 @@ export function placeBrokerOrder(accountId: string, order: Record<string, unknow
   return isTwsMode() ? placeTwsOrder(accountId, order) : placeOrder(accountId, order);
 }
 
+export function previewBrokerBracketOrder(accountId: string, orders: Record<string, unknown>[]) {
+  return isTwsMode() ? previewTwsBracketOrder(accountId, orders) : previewBracketOrder(accountId, orders);
+}
+
+export function placeBrokerBracketOrder(accountId: string, orders: Record<string, unknown>[]) {
+  return isTwsMode() ? placeTwsBracketOrder(accountId, orders) : placeBracketOrder(accountId, orders);
+}
+
 export function getBrokerOpenOrders() {
   return isTwsMode() ? getTwsOpenOrders() : getOpenOrders();
+}
+
+export function getBrokerOrderStatus(orderId: string) {
+  return isTwsMode() ? getTwsOrderStatus(orderId) : getOrderStatus(orderId);
 }
 
 export function getBrokerPortfolio() {

@@ -1,7 +1,7 @@
 import { validateOrderRisk } from "@alfa-omega/risk-engine";
 import type { TradeOrderResponse } from "@alfa-omega/trading-types";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import {
@@ -23,6 +23,10 @@ const maxOpenTrades = Number(process.env.MAX_OPEN_TRADES || 3);
 const assistantChunkSize = 42;
 const ibkrExecutorUrl = process.env.IBKR_EXECUTOR_URL ?? "http://localhost:8080";
 const ibkrExecutorApiKey = process.env.IBKR_EXECUTOR_API_KEY ?? "";
+const brokerGatewayUrl = process.env.BROKER_GATEWAY_URL ?? "http://localhost:4100";
+const brokerGatewayApiKey = process.env.BROKER_GATEWAY_API_KEY ?? "";
+const operatorAuthRequired = process.env.OPERATOR_AUTH_REQUIRED === "true";
+const operatorApiKey = process.env.OPERATOR_API_KEY ?? "";
 const apiAllowLiveTrading = process.env.ALLOW_LIVE_TRADING === "true";
 const maxOrderQty = Number(process.env.MAX_ORDER_QTY ?? 1);
 const maxOrderNotional = Number(process.env.MAX_ORDER_NOTIONAL ?? 500);
@@ -60,6 +64,86 @@ const TradingOrderSchema = z.object({
   symbol: z.string().min(1),
   tif: z.enum(["DAY", "GTC", "IOC"]).default("DAY")
 });
+
+const GatewayOrderSchema = z.object({
+  accountId: z.string().min(1),
+  accountMode: z.literal("paper").default("paper"),
+  brokerId: z.enum(["ibkr", "simulated"]),
+  conid: z.number().int().positive().optional(),
+  idempotencyKey: z.string().optional(),
+  instrumentId: z.string().min(1),
+  limitPrice: z.number().positive(),
+  orderType: z.literal("LMT").default("LMT"),
+  quantity: z.number().positive(),
+  side: z.enum(["BUY", "SELL"]),
+  stopLoss: z.number().positive().optional(),
+  symbol: z.string().min(1),
+  takeProfit: z.number().positive().optional(),
+  tif: z.enum(["DAY", "GTC", "IOC"]).default("DAY")
+});
+
+const ScheduleSchema = z.object({
+  amount: z.number().positive(),
+  amountType: z.enum(["quantity", "usd"]),
+  broker: z.enum(["ibkr", "simulated"]),
+  brokerAccountId: z.string().min(1),
+  instrumentId: z.string().min(1),
+  intervalCount: z.number().int().positive().optional(),
+  intervalUnit: z.enum(["minute", "hour", "day"]).optional(),
+  nextRunAt: z.string().datetime(),
+  scheduleKind: z.enum(["interval", "weekly"]),
+  side: z.enum(["BUY", "SELL"]),
+  stopLoss: z.number().positive().optional(),
+  symbol: z.string().min(1),
+  takeProfit: z.number().positive().optional(),
+  timezone: z.string().default("America/Bogota"),
+  weeklyDays: z.array(z.number().int().min(0).max(6)).optional(),
+  weeklyTime: z.string().regex(/^\d{2}:\d{2}$/).optional()
+});
+
+const StrategySchema = z.object({
+  amount: z.number().positive(),
+  amountType: z.enum(["quantity", "usd"]),
+  broker: z.enum(["ibkr", "simulated"]),
+  brokerAccountId: z.string().min(1),
+  fastPeriod: z.number().int().min(2),
+  instrumentId: z.string().min(1),
+  slowPeriod: z.number().int().min(3),
+  stopLossPercent: z.number().positive(),
+  symbol: z.string().min(1),
+  takeProfitPercent: z.number().positive(),
+  timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"])
+}).refine((value) => value.fastPeriod < value.slowPeriod, {
+  message: "fastPeriod must be lower than slowPeriod"
+});
+
+const RiskSettingsSchema = z.object({
+  maxDailyRiskPct: z.number().positive().max(1),
+  maxDailyTrades: z.number().int().positive().max(10000),
+  maxOpenTrades: z.number().int().positive().max(1000),
+  maxOrderNotional: z.number().positive(),
+  maxOrderQty: z.number().positive(),
+  riskPerTradePct: z.number().positive().max(1)
+});
+
+type RiskSettings = z.infer<typeof RiskSettingsSchema>;
+
+const defaultRiskSettings: RiskSettings = {
+  maxDailyRiskPct,
+  maxDailyTrades,
+  maxOpenTrades,
+  maxOrderNotional,
+  maxOrderQty,
+  riskPerTradePct
+};
+
+function getRiskSettings(db: LocalDb): RiskSettings {
+  const latest = db.system_logs
+    .filter((log) => log.message === "risk_settings_updated")
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  const parsed = RiskSettingsSchema.safeParse(latest?.metadata?.settings);
+  return parsed.success ? parsed.data : defaultRiskSettings;
+}
 
 type TradingOrder = z.infer<typeof TradingOrderSchema>;
 type TradingHttpStatus = 200 | 400 | 500 | 502;
@@ -120,6 +204,41 @@ function requireSupabase() {
     throw new Error("Supabase is required for IBKR trading endpoints");
   }
   return client;
+}
+
+async function requireOperator(c: Context) {
+  if (!operatorAuthRequired) return null;
+  if (operatorApiKey && c.req.header("x-operator-key") === operatorApiKey) return null;
+  const token = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
+  const client = getSupabase();
+  if (!token || !client) return c.json({ ok: false, error: "operator authentication required" }, 401);
+  const { data, error } = await client.auth.getUser(token);
+  if (error || data.user?.app_metadata?.role !== "operator") {
+    return c.json({ ok: false, error: "operator role required" }, 403);
+  }
+  return null;
+}
+
+for (const pattern of ["/api/brokers/*", "/api/risk/*", "/api/schedules/*", "/api/strategies/*", "/api/trading/*"]) {
+  app.use(pattern, async (c, next) => {
+    if (c.req.method === "GET") return next();
+    const rejection = await requireOperator(c);
+    if (rejection) return rejection;
+    return next();
+  });
+}
+
+async function callBrokerGateway(path: string, init?: RequestInit) {
+  const response = await fetch(`${brokerGatewayUrl}${path}`, {
+    ...init,
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": brokerGatewayApiKey,
+      ...(init?.headers ?? {})
+    }
+  });
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  return { data, status: response.status };
 }
 
 async function readRuntimeState(client: SupabaseClient) {
@@ -280,11 +399,42 @@ async function callExecutor(endpoint: "/orders" | "/orders/preview", input: Trad
   return { data, status: response.status };
 }
 
+async function syncExecutorRiskSettings(settings: RiskSettings) {
+  const response = await fetch(`${ibkrExecutorUrl}/risk/settings`, {
+    body: JSON.stringify({
+      maxDailyTrades: settings.maxDailyTrades,
+      maxOrderNotional: settings.maxOrderNotional,
+      maxOrderQty: settings.maxOrderQty
+    }),
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": ibkrExecutorApiKey
+    },
+    method: "POST"
+  });
+  if (!response.ok) throw new Error(`executor risk settings sync failed: ${response.status}`);
+}
+
 async function callExecutorGet(endpoint: "/executions" | "/orders/open" | "/portfolio") {
   const response = await fetch(`${ibkrExecutorUrl}${endpoint}`, {
     headers: {
       "x-api-key": ibkrExecutorApiKey
     }
+  });
+  const data = (await response.json().catch(() => ({}))) as {
+    data?: unknown;
+    error?: unknown;
+    ok?: boolean;
+  };
+  return { data, status: response.status };
+}
+
+async function callExecutorDelete(endpoint: `/orders/${string}`) {
+  const response = await fetch(`${ibkrExecutorUrl}${endpoint}`, {
+    headers: {
+      "x-api-key": ibkrExecutorApiKey
+    },
+    method: "DELETE"
   });
   const data = (await response.json().catch(() => ({}))) as {
     data?: unknown;
@@ -306,6 +456,7 @@ async function handleLocalTradingOrder(
   isPreview: boolean
 ): Promise<TradingHandlerResult> {
   const db = await readDb();
+  const limits = getRiskSettings(db);
   const orderId = createId();
   const dailyTrades = db.system_logs.filter((log) => {
     const broker = log.metadata?.broker;
@@ -329,9 +480,9 @@ async function handleLocalTradingOrder(
     allowedSymbols: allowedSymbols.length ? allowedSymbols : undefined,
     dailyTrades,
     killSwitch: db.bot_status.status === "risk_locked",
-    maxDailyTrades,
-    maxOrderNotional,
-    maxOrderQty
+    maxDailyTrades: limits.maxDailyTrades,
+    maxOrderNotional: limits.maxOrderNotional,
+    maxOrderQty: limits.maxOrderQty
   });
 
   db.system_logs.push({
@@ -357,6 +508,7 @@ async function handleLocalTradingOrder(
 
   const endpoint = isPreview ? "/orders/preview" : "/orders";
   try {
+    await syncExecutorRiskSettings(limits);
     const executor = await callExecutor(endpoint, input);
     const brokerStatus = executor.status >= 400 ? "broker_error" : statusFromExecutor(executor.data, isPreview);
     db.system_logs.push({
@@ -671,18 +823,22 @@ function closeTrade(
 }
 
 function getRiskSnapshot(db: Awaited<ReturnType<typeof readDb>>) {
+  const settings = getRiskSettings(db);
   const today = new Date().toISOString().slice(0, 10);
   const openTrades = db.trades.filter((t) => t.status === "open");
   const dailyRiskUsed = openTrades
     .filter((t) => t.opened_at.slice(0, 10) === today)
     .reduce((acc, t) => acc + t.risk_amount, 0);
   const capital = db.bot_status.capital;
-  const dailyRiskLimit = capital * maxDailyRiskPct;
+  const dailyRiskLimit = capital * settings.maxDailyRiskPct;
 
   return {
-    risk_per_trade_pct: riskPerTradePct,
-    max_daily_risk_pct: maxDailyRiskPct,
-    max_open_trades: maxOpenTrades,
+    risk_per_trade_pct: settings.riskPerTradePct,
+    max_daily_risk_pct: settings.maxDailyRiskPct,
+    max_open_trades: settings.maxOpenTrades,
+    max_order_qty: settings.maxOrderQty,
+    max_order_notional: settings.maxOrderNotional,
+    max_daily_trades: settings.maxDailyTrades,
     open_trades: openTrades.length,
     daily_risk_used: dailyRiskUsed,
     daily_risk_limit: dailyRiskLimit,
@@ -999,6 +1155,44 @@ app.get("/risk", async (c) => {
   return c.json({ ok: true, data: getRiskSnapshot(db) });
 });
 
+app.get("/api/risk/settings", async (c) => {
+  const db = await readDb();
+  return c.json({ ok: true, data: getRiskSettings(db) });
+});
+
+app.post("/api/risk/settings", async (c) => {
+  const parsed = RiskSettingsSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+  const db = await readDb();
+  db.system_logs.push({
+    id: createId(),
+    level: "warn",
+    message: "risk_settings_updated",
+    metadata: { settings: parsed.data },
+    created_at: new Date().toISOString()
+  });
+  await writeDb(db);
+  let executorSynced = false;
+  try {
+    const response = await fetch(`${ibkrExecutorUrl}/risk/settings`, {
+      body: JSON.stringify({
+        maxDailyTrades: parsed.data.maxDailyTrades,
+        maxOrderNotional: parsed.data.maxOrderNotional,
+        maxOrderQty: parsed.data.maxOrderQty
+      }),
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": ibkrExecutorApiKey
+      },
+      method: "POST"
+    });
+    executorSynced = response.ok;
+  } catch {
+    executorSynced = false;
+  }
+  return c.json({ ok: true, data: parsed.data, executorSynced });
+});
+
 async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<TradingHandlerResult> {
   const parsed = TradingOrderSchema.safeParse(input);
   if (!parsed.success) {
@@ -1014,6 +1208,7 @@ async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<T
   }
 
   const runtime = await readRuntimeState(client);
+  const limits = getRiskSettings(await readDb());
   const dailyTrades = await countDailyOrders(client);
   const signalId = await insertTradingSignal(client, parsed.data.signal);
   const orderId = await insertTradeOrder(client, parsed.data, signalId);
@@ -1023,9 +1218,9 @@ async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<T
     allowedSymbols: allowedSymbols.length ? allowedSymbols : undefined,
     dailyTrades,
     killSwitch: runtime.kill_switch,
-    maxDailyTrades,
-    maxOrderNotional,
-    maxOrderQty
+    maxDailyTrades: limits.maxDailyTrades,
+    maxOrderNotional: limits.maxOrderNotional,
+    maxOrderQty: limits.maxOrderQty
   });
 
   await insertRiskEvent(client, orderId, signalId, decision);
@@ -1043,6 +1238,7 @@ async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<T
 
   const endpoint = isPreview ? "/orders/preview" : "/orders";
   try {
+    await syncExecutorRiskSettings(limits);
     const executor = await callExecutor(endpoint, parsed.data);
     await insertBrokerLog(client, {
       endpoint,
@@ -1142,6 +1338,51 @@ app.get("/api/trading/orders/open", async (c) => {
   }
 });
 
+app.delete("/api/trading/orders/:orderId", async (c) => {
+  const orderId = c.req.param("orderId");
+  if (!/^\d+$/.test(orderId)) {
+    return c.json({ ok: false, error: "numeric order id is required" }, 400);
+  }
+
+  try {
+    const executor = await callExecutorDelete(`/orders/${orderId}`);
+    if (executor.status >= 400) {
+      return c.json(
+        {
+          broker: executor.data,
+          error: executor.data.error ?? "executor call failed",
+          ok: false
+        },
+        executor.status >= 500 ? 502 : 400
+      );
+    }
+
+    const db = await readDb();
+    db.system_logs.push({
+      id: createId(),
+      level: "warn",
+      message: "ibkr_order_cancelled",
+      metadata: {
+        broker: executor.data,
+        orderId,
+        statusCode: executor.status
+      },
+      created_at: new Date().toISOString()
+    });
+    await writeDb(db);
+
+    return c.json({
+      data: executor.data.data ?? executor.data,
+      ok: true
+    });
+  } catch (error) {
+    return c.json(
+      { ok: false, error: error instanceof Error ? error.message : "executor call failed" },
+      502
+    );
+  }
+});
+
 async function handleTradingRead(endpoint: "/executions" | "/portfolio") {
   const executor = await callExecutorGet(endpoint);
   if (executor.status >= 400) {
@@ -1186,6 +1427,232 @@ app.get("/api/trading/executions", async (c) => {
       502
     );
   }
+});
+
+app.get("/api/brokers", async (c) => {
+  const result = await callBrokerGateway("/brokers");
+  return c.json(result.data, result.status >= 400 ? 502 : 200);
+});
+
+app.get("/api/runtime/capabilities", (c) =>
+  c.json({
+    ok: true,
+    data: {
+      automationEnabled: Boolean(getSupabase()),
+      brokerGatewayUrl,
+      operatorAuthRequired,
+      persistence: getSupabase() ? "supabase" : "local"
+    }
+  })
+);
+
+app.get("/api/brokers/:brokerId/accounts", async (c) => {
+  const result = await callBrokerGateway(`/brokers/${encodeURIComponent(c.req.param("brokerId"))}/accounts`);
+  return c.json(result.data, result.status >= 400 ? 502 : 200);
+});
+
+app.get("/api/brokers/:brokerId/instruments/search", async (c) => {
+  const path = `/brokers/${encodeURIComponent(c.req.param("brokerId"))}/instruments/search?q=${encodeURIComponent(c.req.query("q") ?? "")}`;
+  const result = await callBrokerGateway(path);
+  return c.json(result.data, result.status >= 400 ? 502 : 200);
+});
+
+app.get("/api/brokers/:brokerId/instruments/:instrumentId/candles", async (c) => {
+  const path = `/brokers/${encodeURIComponent(c.req.param("brokerId"))}/instruments/${encodeURIComponent(c.req.param("instrumentId"))}/candles?timeframe=${encodeURIComponent(c.req.query("timeframe") ?? "1h")}&limit=${encodeURIComponent(c.req.query("limit") ?? "100")}`;
+  const result = await callBrokerGateway(path);
+  return c.json(result.data, result.status >= 400 ? 502 : 200);
+});
+
+app.post("/api/trading/v2/orders/:action", async (c) => {
+  const action = c.req.param("action");
+  if (action !== "preview" && action !== "submit") return c.json({ ok: false, error: "invalid action" }, 404);
+  const parsed = GatewayOrderSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+  const input = parsed.data;
+  const client = getSupabase();
+  const limits = getRiskSettings(await readDb());
+  let duplicate = false;
+  if (client && input.idempotencyKey) {
+    const result = await client.from("trade_orders").select("id", { count: "exact", head: true }).eq("idempotency_key", input.idempotencyKey);
+    duplicate = Boolean(result.count);
+  }
+  const decision = validateOrderRisk({
+    ...input,
+    allowLiveTrading: false,
+    conid: input.conid ?? Number(input.instrumentId),
+    dailyTrades: client ? await countDailyOrders(client) : 0,
+    idempotencyKeyExists: duplicate,
+    killSwitch: client ? (await readRuntimeState(client)).kill_switch : false,
+    maxDailyTrades: limits.maxDailyTrades,
+    maxOrderNotional: limits.maxOrderNotional,
+    maxOrderQty: limits.maxOrderQty,
+    stopLoss: input.stopLoss,
+    takeProfit: input.takeProfit
+  });
+  if (!decision.passed) return c.json({ ok: false, risk: decision }, 400);
+  if (input.brokerId === "ibkr") await syncExecutorRiskSettings(limits);
+  const result = await callBrokerGateway(`/brokers/${input.brokerId}/orders/${action}`, {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+  if (result.status >= 400) return c.json({ ok: false, broker: result.data }, 502);
+  let persistedOrderId: string | null = null;
+  if (client && action === "submit") {
+    const brokerData = result.data.data as Record<string, unknown> | Array<Record<string, unknown>> | undefined;
+    const first = Array.isArray(brokerData) ? brokerData[0] : brokerData;
+    const brokerOrderId = first && typeof first.brokerOrderId === "string" ? first.brokerOrderId : null;
+    const inserted = await client.from("trade_orders").insert({
+      account_mode: "paper",
+      broker: input.brokerId,
+      broker_account_id: input.accountId,
+      broker_order_id: brokerOrderId,
+      broker_response: result.data,
+      conid: input.conid ?? Number(input.instrumentId),
+      idempotency_key: input.idempotencyKey ?? null,
+      instrument_id: input.instrumentId,
+      limit_price: input.limitPrice,
+      normalized_status: "submitted",
+      order_type: input.orderType,
+      quantity: input.quantity,
+      side: input.side,
+      status: "submitted",
+      symbol: input.symbol,
+      tif: input.tif
+    }).select("id").single();
+    if (inserted.error) return c.json({ ok: false, error: inserted.error.message }, 500);
+    persistedOrderId = inserted.data.id as string;
+    const legs = Array.isArray(brokerData) ? brokerData : [brokerData].filter(Boolean);
+    if (input.stopLoss !== undefined && input.takeProfit !== undefined) {
+      await client.from("order_legs").insert(legs.map((leg, index) => ({
+        broker_order_id: typeof leg?.brokerOrderId === "string" ? leg.brokerOrderId : null,
+        broker_response: leg,
+        leg_type: index === 0 ? "entry" : index === 1 ? "stop_loss" : "take_profit",
+        order_id: persistedOrderId,
+        price: index === 0 ? input.limitPrice : index === 1 ? input.stopLoss : input.takeProfit,
+        quantity: input.quantity,
+        status: "submitted"
+      })));
+    }
+    await Promise.all([
+      client.from("risk_events").insert({
+        metadata: decision.metadata ?? {},
+        order_id: persistedOrderId,
+        passed: true,
+        reason: null,
+        rule_name: decision.rule
+      }),
+      client.from("broker_execution_logs").insert({
+        broker: input.brokerId,
+        endpoint: `/brokers/${input.brokerId}/orders/${action}`,
+        order_id: persistedOrderId,
+        request_payload: input,
+        response_payload: result.data,
+        status_code: result.status
+      }),
+      client.from("order_status_events").insert({
+        broker: input.brokerId,
+        broker_order_id: brokerOrderId,
+        order_id: persistedOrderId,
+        payload: result.data,
+        status: "submitted"
+      })
+    ]);
+  } else if (action === "submit") {
+    const db = await readDb();
+    persistedOrderId = createId();
+    db.system_logs.push({
+      id: createId(),
+      level: "info",
+      message: "local_multibroker_order",
+      metadata: {
+        broker: input.brokerId,
+        brokerResponse: result.data,
+        idempotencyKey: input.idempotencyKey ?? null,
+        order: input,
+        orderId: persistedOrderId
+      },
+      created_at: new Date().toISOString()
+    });
+    await writeDb(db);
+  }
+  return c.json({ ok: true, ...result.data, orderId: persistedOrderId });
+});
+
+app.get("/api/schedules", async (c) => {
+  const client = requireSupabase();
+  const result = await client.from("recurring_schedules").select("*").order("created_at", { ascending: false });
+  if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  return c.json({ ok: true, data: result.data });
+});
+
+app.post("/api/schedules", async (c) => {
+  const parsed = ScheduleSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+  const input = parsed.data;
+  const result = await requireSupabase().from("recurring_schedules").insert({
+    amount: input.amount,
+    amount_type: input.amountType,
+    broker: input.broker,
+    broker_account_id: input.brokerAccountId,
+    instrument_id: input.instrumentId,
+    interval_count: input.intervalCount ?? null,
+    interval_unit: input.intervalUnit ?? null,
+    next_run_at: input.nextRunAt,
+    schedule_kind: input.scheduleKind,
+    side: input.side,
+    stop_loss: input.stopLoss ?? null,
+    symbol: input.symbol,
+    take_profit: input.takeProfit ?? null,
+    timezone: input.timezone,
+    weekly_days: input.weeklyDays ?? null,
+    weekly_time: input.weeklyTime ?? null
+  }).select().single();
+  if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  return c.json({ ok: true, data: result.data }, 201);
+});
+
+app.patch("/api/schedules/:id/:action", async (c) => {
+  const action = c.req.param("action");
+  if (!["pause", "resume", "cancel"].includes(action)) return c.json({ ok: false, error: "invalid action" }, 400);
+  const status = action === "pause" ? "paused" : action === "resume" ? "active" : "cancelled";
+  const result = await requireSupabase().from("recurring_schedules").update({ status, updated_at: new Date().toISOString() }).eq("id", c.req.param("id")).select().single();
+  if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  return c.json({ ok: true, data: result.data });
+});
+
+app.get("/api/strategies", async (c) => {
+  const result = await requireSupabase().from("strategy_configs").select("*").order("created_at", { ascending: false });
+  if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  return c.json({ ok: true, data: result.data });
+});
+
+app.post("/api/strategies", async (c) => {
+  const parsed = StrategySchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+  const input = parsed.data;
+  const result = await requireSupabase().from("strategy_configs").insert({
+    amount: input.amount,
+    amount_type: input.amountType,
+    broker: input.broker,
+    broker_account_id: input.brokerAccountId,
+    fast_period: input.fastPeriod,
+    instrument_id: input.instrumentId,
+    slow_period: input.slowPeriod,
+    stop_loss_percent: input.stopLossPercent,
+    symbol: input.symbol,
+    take_profit_percent: input.takeProfitPercent,
+    timeframe: input.timeframe
+  }).select().single();
+  if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  return c.json({ ok: true, data: result.data }, 201);
+});
+
+app.patch("/api/strategies/:id/:action", async (c) => {
+  const action = c.req.param("action");
+  if (!["pause", "resume"].includes(action)) return c.json({ ok: false, error: "invalid action" }, 400);
+  const result = await requireSupabase().from("strategy_configs").update({ status: action === "pause" ? "paused" : "active", updated_at: new Date().toISOString() }).eq("id", c.req.param("id")).select().single();
+  if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  return c.json({ ok: true, data: result.data });
 });
 
 Bun.serve({

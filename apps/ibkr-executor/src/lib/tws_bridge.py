@@ -5,7 +5,7 @@ import sys
 from typing import Any, Optional
 
 try:
-    from ib_insync import IB, LimitOrder, Stock
+    from ib_insync import IB, LimitOrder, StopOrder, Stock
 except Exception as exc:
     print(json.dumps({"ok": False, "error": f"ib_insync is not installed: {exc}"}))
     sys.exit(0)
@@ -21,7 +21,7 @@ def connect(action: Optional[str] = None) -> IB:
     host = os.environ.get("IBKR_HOST") or os.environ.get("IBKR_TWS_HOST", "127.0.0.1")
     port = int(os.environ.get("IBKR_PORT") or os.environ.get("IBKR_TWS_PORT", "4002"))
     client_id = int(os.environ.get("IBKR_CLIENT_ID") or os.environ.get("IBKR_TWS_CLIENT_ID", "1"))
-    if action in ("accounts", "authStatus", "executions", "marketdata", "openOrders", "portfolio"):
+    if action in ("accounts", "authStatus", "executions", "historicalData", "marketdata", "openOrders", "orderStatus", "portfolio", "searchInstruments"):
         client_id = client_id + 10 + (os.getpid() % 1000)
     timeout = float(os.environ.get("IBKR_TWS_TIMEOUT_SECONDS", "8"))
     ib.connect(host, port, clientId=client_id, timeout=timeout)
@@ -84,6 +84,40 @@ def order_result(trade) -> dict[str, Any]:
     }
 
 
+def instrument_result(contract) -> dict[str, Any]:
+    return {
+        "assetClass": getattr(contract, "secType", "STK") or "STK",
+        "brokerId": "ibkr",
+        "currency": getattr(contract, "currency", "USD") or "USD",
+        "exchange": getattr(contract, "primaryExchange", "") or getattr(contract, "exchange", "SMART"),
+        "instrumentId": str(getattr(contract, "conId", "")),
+        "name": getattr(contract, "description", "") or getattr(contract, "symbol", ""),
+        "symbol": getattr(contract, "symbol", ""),
+    }
+
+
+def build_wire_order(payload: dict[str, Any], account: str, what_if: bool):
+    order_type = payload.get("orderType")
+    if order_type == "STP":
+        order = StopOrder(
+            str(payload["side"]),
+            float(payload["quantity"]),
+            float(payload["price"]),
+            account=account,
+            tif=str(payload.get("tif", "GTC")),
+        )
+    else:
+        order = LimitOrder(
+            str(payload["side"]),
+            float(payload["quantity"]),
+            float(payload["price"]),
+            account=account,
+            tif=str(payload.get("tif", "DAY")),
+        )
+    order.whatIf = what_if
+    return order
+
+
 def main() -> None:
     payload = read_payload()
     action = payload.get("action")
@@ -116,10 +150,63 @@ def main() -> None:
             }))
             return
 
+        if action == "searchInstruments":
+            matches = ib.reqMatchingSymbols(str(payload.get("query", "")))
+            print(json.dumps({
+                "ok": True,
+                "mode": "tws",
+                "instruments": [instrument_result(match.contract) for match in matches[:25]],
+            }))
+            return
+
+        if action == "historicalData":
+            contract = Stock("", "SMART", "USD")
+            contract.conId = int(payload["conid"])
+            qualified = ib.qualifyContracts(contract)
+            contract = qualified[0] if qualified else contract
+            timeframe = str(payload.get("timeframe", "1h"))
+            bars = {
+                "1m": "1 min",
+                "5m": "5 mins",
+                "15m": "15 mins",
+                "1h": "1 hour",
+                "4h": "4 hours",
+                "1d": "1 day",
+            }
+            duration = "1 D" if timeframe in ("1m", "5m", "15m") else "30 D"
+            rows = ib.reqHistoricalData(
+                contract,
+                endDateTime="",
+                durationStr=duration,
+                barSizeSetting=bars.get(timeframe, "1 hour"),
+                whatToShow="TRADES",
+                useRTH=True,
+                formatDate=2,
+            )
+            limit = int(payload.get("limit", 100))
+            candles = [{
+                "timestamp": str(row.date),
+                "open": row.open,
+                "high": row.high,
+                "low": row.low,
+                "close": row.close,
+                "volume": row.volume,
+            } for row in rows[-limit:]]
+            print(json.dumps({"ok": True, "mode": "tws", "candles": serialize(candles)}))
+            return
+
         if action == "openOrders":
             ib.reqAllOpenOrders()
             ib.sleep(1)
             print(json.dumps({"ok": True, "orders": serialize(ib.openTrades()), "mode": "tws"}))
+            return
+
+        if action == "orderStatus":
+            order_id = int(payload["orderId"])
+            ib.reqAllOpenOrders()
+            ib.sleep(1)
+            trade = next((trade for trade in ib.trades() if trade.order.orderId == order_id), None)
+            print(json.dumps({"ok": True, "mode": "tws", "order": order_result(trade) if trade else None}))
             return
 
         if action == "portfolio":
@@ -163,8 +250,39 @@ def main() -> None:
             }))
             return
 
+        if action in ("previewBracket", "placeBracket"):
+            raw_orders = payload.get("orders") or []
+            if len(raw_orders) != 3:
+                raise ValueError("bracket requires entry, stop loss and take profit")
+            account = payload.get("accountId") or os.environ.get("IBKR_ACCOUNT_ID", "")
+            what_if = action == "previewBracket"
+            results = []
+            parent_id = ib.client.getReqId()
+            for index, raw_order in enumerate(raw_orders):
+                contract = Stock(str(raw_order["ticker"]), "SMART", "USD")
+                contract.conId = int(raw_order["conid"])
+                qualified = ib.qualifyContracts(contract)
+                contract = qualified[0] if qualified else contract
+                order = build_wire_order(raw_order, account, what_if)
+                order.orderId = parent_id + index
+                order.parentId = 0 if index == 0 else parent_id
+                order.transmit = index == 2
+                trade = ib.placeOrder(contract, order)
+                results.append(trade)
+            ib.sleep(3)
+            print(json.dumps({
+                "ok": True,
+                "dryRun": False,
+                "mode": "tws",
+                "orders": [order_result(trade) for trade in results],
+                "status": "previewed" if what_if else "submitted",
+            }))
+            return
+
         if action == "cancel":
             order_id = int(payload["orderId"])
+            ib.reqAllOpenOrders()
+            ib.sleep(1)
             for trade in ib.openTrades():
                 if trade.order.orderId == order_id:
                     ib.cancelOrder(trade.order)

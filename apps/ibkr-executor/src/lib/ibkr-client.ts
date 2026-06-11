@@ -75,12 +75,35 @@ export function getMarketDataSnapshot(conid: string) {
   return ibkrRequest("GET", `/iserver/marketdata/snapshot?conids=${encodeURIComponent(conid)}`);
 }
 
+export function searchInstruments(query: string) {
+  return ibkrRequest("POST", "/iserver/secdef/search", { name: query });
+}
+
+export function getHistoricalData(conid: string, period: string, bar: string) {
+  return ibkrRequest(
+    "GET",
+    `/iserver/marketdata/history?conid=${encodeURIComponent(conid)}&period=${encodeURIComponent(period)}&bar=${encodeURIComponent(bar)}`
+  );
+}
+
 export function previewOrder(accountId: string, order: unknown) {
   return ibkrRequest("POST", `/iserver/account/${accountId}/orders/whatif`, { orders: [order] });
 }
 
 export function placeOrder(accountId: string, order: unknown) {
   return ibkrRequest("POST", `/iserver/account/${accountId}/orders`, { orders: [order] });
+}
+
+export function placeBracketOrder(accountId: string, orders: unknown[]) {
+  return ibkrRequest("POST", `/iserver/account/${accountId}/orders`, { orders });
+}
+
+export function previewBracketOrder(accountId: string, orders: unknown[]) {
+  return ibkrRequest("POST", `/iserver/account/${accountId}/orders/whatif`, { orders });
+}
+
+export function getOrderStatus(orderId: string) {
+  return ibkrRequest("GET", `/iserver/account/order/status/${encodeURIComponent(orderId)}`);
 }
 
 export function replyToOrderWarning(replyId: string, confirmed: boolean) {

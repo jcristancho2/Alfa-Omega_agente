@@ -64,4 +64,19 @@ describe("validateOrderRisk", () => {
     expect(decision.passed).toBe(true);
     expect(decision.rule).toBe("passed");
   });
+
+  it("rejects duplicated idempotent orders", () => {
+    const decision = validateOrderRisk({ ...baseOrder, idempotencyKeyExists: true });
+    expect(decision.rule).toBe("duplicate_order");
+  });
+
+  it("rejects invalid buy bracket prices", () => {
+    const decision = validateOrderRisk({ ...baseOrder, stopLoss: 110, takeProfit: 120 });
+    expect(decision.rule).toBe("invalid_bracket_prices");
+  });
+
+  it("accepts valid buy bracket prices", () => {
+    const decision = validateOrderRisk({ ...baseOrder, stopLoss: 95, takeProfit: 110 });
+    expect(decision.passed).toBe(true);
+  });
 });

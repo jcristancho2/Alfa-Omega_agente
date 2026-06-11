@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "bun run dev:local",
     "dev:local": "bun scripts/dev-local.mjs",
+    "dev:no-executor": "bun scripts/dev-local.mjs --no-executor",
     "dev:local:broker": "bun scripts/dev-local.mjs --broker",
     "dev:all": "bun run --filter='*' dev",
     "start:local": "bun run dev:local",
@@ -16,6 +17,7 @@
     "dev:api": "bun --cwd apps/api dev",
     "dev:notification": "bun --cwd apps/notification-worker dev",
     "dev:broker": "bun --cwd apps/broker-gateway dev",
+    "dev:orchestrator": "bun --cwd apps/trading-orchestrator dev",
     "dev:executor": "bun --cwd apps/ibkr-executor dev",
     "dev:engine": "python3 apps/trading-engine/main.py",
     "build": "bun run --filter='*' build",

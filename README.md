@@ -23,6 +23,8 @@ El frontend nunca envia ordenes directamente a IBKR. Las ordenes pasan por `apps
 - `apps/notification-worker`: worker Bun para notificaciones Kapso/mock.
 - `apps/trading-engine`: motor Python para senales/trades simulados.
 - `apps/ibkr-executor`: servicio Bun + Hono que habla con IBKR Gateway.
+- `apps/broker-gateway`: frontera neutral con adaptadores IBKR y simulado.
+- `apps/trading-orchestrator`: scheduler, estrategia EMA y reconciliación.
 - `packages/risk-engine`: reglas de riesgo antes de enviar ordenes.
 - `packages/trading-types`: tipos compartidos de trading.
 - `packages/shared`: DB local y adaptador Supabase.
@@ -53,18 +55,31 @@ Para modo local seguro puedes dejar Supabase vacio y usar `LOCAL_DB_PATH=data/lo
 
 ## Ejecutar En Local
 
-Levanta API, trading engine, notification worker y dashboard:
+Levanta API, trading engine, notification worker, IBKR executor y dashboard:
 
 ```bash
 cd /Users/raucrow/Barvaz.dev/alfa-omega
 bun run dev
 ```
 
+Para que IBKR quede conectado, antes abre TWS/IB Gateway Paper y verifica que escuche en `4002`:
+
+```bash
+lsof -nP -iTCP:4002 -sTCP:LISTEN
+```
+
 URLs:
 
 - Dashboard: `http://localhost:3000`
 - API: `http://localhost:4000`
+- IBKR executor: `http://localhost:8080`
 - DB local: `data/local-db.json`
+
+Si quieres levantar la app sin IBKR executor:
+
+```bash
+bun run dev:no-executor
+```
 
 Si necesitas cambiar puertos:
 
@@ -79,7 +94,25 @@ bun run dev:api
 bun run dev:engine
 bun run dev:notification
 bun run dev:dashboard
+bun run dev:executor
+bun run dev:broker
+bun run dev:orchestrator
 ```
+
+## Trading Programado Y Multi-Broker
+
+La ruta operativa nueva usa `apps/api -> packages/risk-engine -> apps/broker-gateway`.
+Las órdenes manuales, recurrentes y generadas por EMA pasan por los mismos
+controles de riesgo y quedan auditadas en Supabase.
+
+- Búsqueda de instrumentos por broker.
+- Órdenes bracket paper con stop loss y take profit.
+- Compras y ventas recurrentes por intervalo o calendario semanal.
+- Estrategia EMA configurable por temporalidad.
+- Reconciliación cada 3 segundos y Supabase Realtime con polling de respaldo.
+
+Aplica `supabase/migrations/004_programmed_multibroker_trading.sql` y consulta
+`docs/programmed-multibroker-runbook.md` antes de activar el orchestrator.
 
 ## Comandos De Prueba Local
 

@@ -8,13 +8,18 @@ import {
   getBrokerAccounts,
   getBrokerAuthStatus,
   getBrokerExecutions,
+  getBrokerHistoricalData,
   getBrokerMarketDataSnapshot,
   getBrokerOpenOrders,
+  getBrokerOrderStatus,
   getBrokerPortfolio,
   initializeBrokerSession,
   placeBrokerOrder,
+  placeBrokerBracketOrder,
   previewBrokerOrder,
+  previewBrokerBracketOrder,
   replyToBrokerWarning,
+  searchBrokerInstruments,
   tickleBrokerSession
 } from "./lib/broker-client";
 
@@ -46,6 +51,24 @@ const ReplySchema = z.object({
   confirmed: z.boolean().default(false)
 });
 
+const ExecutorRiskSettingsSchema = z.object({
+  maxDailyTrades: z.number().int().positive(),
+  maxOrderNotional: z.number().positive(),
+  maxOrderQty: z.number().positive()
+});
+
+let runtimeRiskSettings = {
+  maxDailyTrades: config.maxDailyTrades,
+  maxOrderNotional: config.maxOrderNotional,
+  maxOrderQty: config.maxOrderQty
+};
+
+const BracketOrderSchema = OrderSchema.extend({
+  instrumentId: z.string().optional(),
+  stopLoss: z.number().positive(),
+  takeProfit: z.number().positive()
+});
+
 function isWarningResponse(data: unknown): string | null {
   if (Array.isArray(data)) {
     for (const entry of data) {
@@ -73,6 +96,15 @@ function toIbkrOrder(input: z.infer<typeof OrderSchema>) {
   };
 }
 
+function toIbkrBracket(input: z.infer<typeof BracketOrderSchema>) {
+  const closingSide = input.side === "BUY" ? "SELL" : "BUY";
+  return [
+    toIbkrOrder(input),
+    { ...toIbkrOrder(input), orderType: "STP", price: input.stopLoss, side: closingSide, tif: "GTC" },
+    { ...toIbkrOrder(input), orderType: "LMT", price: input.takeProfit, side: closingSide, tif: "GTC" }
+  ];
+}
+
 function dryRunResponse(status: TradeOrderResponse["status"], rawResponse: unknown): TradeOrderResponse {
   return {
     dryRun: true,
@@ -80,6 +112,48 @@ function dryRunResponse(status: TradeOrderResponse["status"], rawResponse: unkno
     requiresManualConfirmation: false,
     status
   };
+}
+
+function normalizeInstrumentSearch(raw: unknown) {
+  const rows =
+    raw && typeof raw === "object" && "instruments" in raw
+      ? (raw as { instruments?: unknown[] }).instruments ?? []
+      : Array.isArray(raw)
+        ? raw
+        : [];
+  return rows.map((entry) => {
+    const row = entry as Record<string, unknown>;
+    const contract = (row.contract ?? row) as Record<string, unknown>;
+    return {
+      assetClass: String(contract.secType ?? row.assetClass ?? "STK"),
+      brokerId: "ibkr",
+      currency: String(contract.currency ?? row.currency ?? "USD"),
+      exchange: String(contract.primaryExchange ?? contract.exchange ?? row.exchange ?? "SMART"),
+      instrumentId: String(contract.conId ?? row.conid ?? row.instrumentId ?? ""),
+      name: String(row.companyName ?? contract.description ?? row.name ?? contract.symbol ?? ""),
+      symbol: String(contract.symbol ?? row.symbol ?? "")
+    };
+  }).filter((entry) => entry.instrumentId && entry.symbol);
+}
+
+function normalizeCandles(raw: unknown) {
+  const source = raw && typeof raw === "object" && "candles" in raw
+    ? (raw as { candles?: unknown[] }).candles ?? []
+    : raw && typeof raw === "object" && "data" in raw
+      ? (raw as { data?: unknown[] }).data ?? []
+      : [];
+  return source.map((entry) => {
+    const row = entry as Record<string, unknown>;
+    const timestamp = row.timestamp ?? row.t ?? new Date().toISOString();
+    return {
+      close: Number(row.close ?? row.c ?? 0),
+      high: Number(row.high ?? row.h ?? 0),
+      low: Number(row.low ?? row.l ?? 0),
+      open: Number(row.open ?? row.o ?? 0),
+      timestamp: typeof timestamp === "number" ? new Date(timestamp).toISOString() : String(timestamp),
+      volume: Number(row.volume ?? row.v ?? 0)
+    };
+  });
 }
 
 app.get("/health", (c) =>
@@ -109,10 +183,30 @@ app.post("/ibkr/initialize", async (c) =>
   c.json({ ok: true, ...(await initializeBrokerSession()) })
 );
 app.post("/ibkr/tickle", async (c) => c.json({ ok: true, ...(await tickleBrokerSession()) }));
+app.get("/risk/settings", (c) => c.json({ ok: true, data: runtimeRiskSettings }));
+app.post("/risk/settings", async (c) => {
+  const parsed = ExecutorRiskSettingsSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+  runtimeRiskSettings = parsed.data;
+  return c.json({ ok: true, data: runtimeRiskSettings });
+});
 app.get("/marketdata/:conid", async (c) =>
   c.json({ ok: true, ...(await getBrokerMarketDataSnapshot(c.req.param("conid"))) })
 );
+app.get("/instruments/search", async (c) => {
+  const result = await searchBrokerInstruments(c.req.query("q") ?? "");
+  return c.json({ ok: true, instruments: normalizeInstrumentSearch(result.data) });
+});
+app.get("/instruments/:conid/candles", async (c) => {
+  const result = await getBrokerHistoricalData(
+    c.req.param("conid"),
+    c.req.query("timeframe") ?? "1h",
+    Number(c.req.query("limit") ?? 100)
+  );
+  return c.json({ ok: true, candles: normalizeCandles(result.data) });
+});
 app.get("/orders/open", async (c) => c.json({ ok: true, ...(await getBrokerOpenOrders()) }));
+app.get("/orders/:orderId", async (c) => c.json({ ok: true, ...(await getBrokerOrderStatus(c.req.param("orderId"))) }));
 app.get("/portfolio", async (c) => c.json({ ok: true, ...(await getBrokerPortfolio()) }));
 app.get("/executions", async (c) => c.json({ ok: true, ...(await getBrokerExecutions()) }));
 
@@ -127,9 +221,9 @@ app.post("/orders/preview", async (c) => {
     allowLiveTrading: config.allowLiveTrading,
     dailyTrades: 0,
     killSwitch: false,
-    maxDailyTrades: config.maxDailyTrades,
-    maxOrderNotional: config.maxOrderNotional,
-    maxOrderQty: config.maxOrderQty
+    maxDailyTrades: runtimeRiskSettings.maxDailyTrades,
+    maxOrderNotional: runtimeRiskSettings.maxOrderNotional,
+    maxOrderQty: runtimeRiskSettings.maxOrderQty
   });
   if (!risk.passed) {
     return c.json({ ok: false, risk }, 400);
@@ -162,9 +256,9 @@ app.post("/orders", async (c) => {
     allowLiveTrading: config.allowLiveTrading,
     dailyTrades: 0,
     killSwitch: false,
-    maxDailyTrades: config.maxDailyTrades,
-    maxOrderNotional: config.maxOrderNotional,
-    maxOrderQty: config.maxOrderQty
+    maxDailyTrades: runtimeRiskSettings.maxDailyTrades,
+    maxOrderNotional: runtimeRiskSettings.maxOrderNotional,
+    maxOrderQty: runtimeRiskSettings.maxOrderQty
   });
   if (!risk.passed) {
     return c.json({ ok: false, risk }, 400);
@@ -196,6 +290,33 @@ app.post("/orders", async (c) => {
     status: "submitted"
   });
 });
+
+for (const action of ["preview", "submit"] as const) {
+  app.post(`/orders/bracket/${action}`, async (c) => {
+    const parsed = BracketOrderSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+    const accountId = parsed.data.accountId ?? config.ibkrAccountId;
+    const risk = validateOrderRisk({
+      ...parsed.data,
+      allowLiveTrading: config.allowLiveTrading,
+      dailyTrades: 0,
+      killSwitch: false,
+      maxDailyTrades: runtimeRiskSettings.maxDailyTrades,
+      maxOrderNotional: runtimeRiskSettings.maxOrderNotional,
+      maxOrderQty: runtimeRiskSettings.maxOrderQty,
+      stopLoss: parsed.data.stopLoss,
+      takeProfit: parsed.data.takeProfit
+    });
+    if (!risk.passed) return c.json({ ok: false, risk }, 400);
+    if (config.dryRun) {
+      return c.json({ ok: true, ...dryRunResponse(action === "preview" ? "previewed" : "submitted", { accountId, orders: toIbkrBracket(parsed.data), risk }) });
+    }
+    const response = action === "preview"
+      ? await previewBrokerBracketOrder(accountId, toIbkrBracket(parsed.data))
+      : await placeBrokerBracketOrder(accountId, toIbkrBracket(parsed.data));
+    return c.json({ dryRun: false, ok: true, rawResponse: response.data, requiresManualConfirmation: false, status: action === "preview" ? "previewed" : "submitted" });
+  });
+}
 
 app.post("/orders/reply/:replyId", async (c) => {
   const parsed = ReplySchema.safeParse(await c.req.json().catch(() => ({})));

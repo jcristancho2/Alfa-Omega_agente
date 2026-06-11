@@ -8,6 +8,11 @@ export interface RiskInput extends TradeOrderRequest {
   maxDailyTrades: number;
   maxOrderNotional: number;
   maxOrderQty: number;
+  availableCash?: number;
+  availablePositionQty?: number;
+  idempotencyKeyExists?: boolean;
+  stopLoss?: number;
+  takeProfit?: number;
 }
 
 function fail(rule: string, reason: string, metadata?: Record<string, unknown>): RiskDecision {
@@ -21,6 +26,10 @@ export function validateOrderRisk(input: RiskInput): RiskDecision {
 
   if (input.accountMode === "live" && !input.allowLiveTrading) {
     return fail("live_trading_disabled", "Live trading is disabled");
+  }
+
+  if (input.idempotencyKeyExists) {
+    return fail("duplicate_order", "An order with this idempotency key already exists");
   }
 
   if (input.quantity <= 0) {
@@ -52,6 +61,38 @@ export function validateOrderRisk(input: RiskInput): RiskDecision {
       maxOrderNotional: input.maxOrderNotional,
       notional
     });
+  }
+
+  if (input.availableCash !== undefined && input.side === "BUY" && notional > input.availableCash) {
+    return fail("insufficient_cash", "Order notional exceeds available cash", {
+      availableCash: input.availableCash,
+      notional
+    });
+  }
+
+  if (
+    input.availablePositionQty !== undefined &&
+    input.side === "SELL" &&
+    input.quantity > input.availablePositionQty
+  ) {
+    return fail("insufficient_position", "Sell quantity exceeds available position", {
+      availablePositionQty: input.availablePositionQty,
+      quantity: input.quantity
+    });
+  }
+
+  if (input.stopLoss !== undefined || input.takeProfit !== undefined) {
+    const referencePrice = input.limitPrice;
+    if (!referencePrice || input.stopLoss === undefined || input.takeProfit === undefined) {
+      return fail("bracket_prices_required", "Bracket orders require entry, stop loss and take profit");
+    }
+    const valid =
+      input.side === "BUY"
+        ? input.stopLoss < referencePrice && input.takeProfit > referencePrice
+        : input.stopLoss > referencePrice && input.takeProfit < referencePrice;
+    if (!valid) {
+      return fail("invalid_bracket_prices", "Stop loss and take profit are invalid for order side");
+    }
   }
 
   if (input.dailyTrades >= input.maxDailyTrades) {

@@ -209,6 +209,8 @@ export default function AssistantPanel() {
           <button
             key={prompt}
             type="button"
+            aria-label={`Preguntar: ${prompt}`}
+            title={`Envía la consulta rápida “${prompt}” al asistente.`}
             disabled={status === "streaming"}
             onClick={() => void send(prompt)}
             className="rounded border border-sky-400/20 bg-slate-950/60 px-2.5 py-1.5 text-xs font-semibold text-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
@@ -220,6 +222,8 @@ export default function AssistantPanel() {
 
       <form onSubmit={submit} className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
         <input
+          aria-label="Pregunta para el asistente ALFA"
+          title="Escribe una pregunta sobre estado, riesgo, señales u operaciones."
           value={input}
           disabled={status === "streaming"}
           onChange={(event) => setInput(event.target.value)}
@@ -229,6 +233,8 @@ export default function AssistantPanel() {
         {status === "streaming" ? (
           <button
             type="button"
+            aria-label="Detener respuesta del asistente"
+            title="Detiene la respuesta que el asistente está generando."
             onClick={() => abortRef.current?.abort()}
             className="h-10 rounded border border-amber-400/35 bg-amber-500/10 px-3 text-sm font-semibold text-amber-200"
           >
@@ -237,6 +243,8 @@ export default function AssistantPanel() {
         ) : (
           <button
             type="submit"
+            aria-label="Enviar pregunta al asistente"
+            title="Envía tu pregunta al asistente ALFA."
             className="h-10 rounded border border-cyan-400/35 bg-cyan-500/15 px-3 text-sm font-semibold text-cyan-100"
           >
             Enviar
