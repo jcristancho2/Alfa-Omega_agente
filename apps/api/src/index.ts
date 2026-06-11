@@ -224,7 +224,7 @@ async function requireOperator(c: Context) {
   return null;
 }
 
-for (const pattern of ["/api/brokers/*", "/api/risk/*", "/api/schedules/*", "/api/strategies/*", "/api/trading/*"]) {
+for (const pattern of ["/api/brokers/*", "/api/orders/*", "/api/risk/*", "/api/schedules/*", "/api/strategies/*", "/api/trading/*"]) {
   app.use(pattern, async (c, next) => {
     if (c.req.method === "GET") return next();
     const rejection = await requireOperator(c);
@@ -244,6 +244,79 @@ async function callBrokerGateway(path: string, init?: RequestInit) {
   });
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   return { data, status: response.status };
+}
+
+interface BrokerOrderSnapshot {
+  brokerOrderId: string | null;
+  filledQuantity: number;
+  raw: Record<string, unknown>;
+  remainingQuantity: number;
+  status: string;
+}
+
+function normalizedOrderStatus(status: unknown) {
+  const value = String(status ?? "").replace(/[\s_-]/g, "").toLowerCase();
+  if (value === "filled") return "filled";
+  if (value === "partiallyfilled") return "partially_filled";
+  if (["cancelled", "apicancelled"].includes(value)) return "cancelled";
+  if (["inactive", "rejected"].includes(value)) return "rejected";
+  if (["created", "pending", "apipending", "pendingsubmit", "presubmitted", "submitted"].includes(value)) {
+    return value === "created" ? "created" : "submitted";
+  }
+  return "failed";
+}
+
+function brokerOrderSnapshots(input: unknown) {
+  const snapshots: BrokerOrderSnapshot[] = [];
+  const seen = new Set<string>();
+
+  function visit(value: unknown) {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const row = value as Record<string, unknown>;
+    const order = row.order && typeof row.order === "object" ? row.order as Record<string, unknown> : null;
+    const orderStatus = row.orderStatus && typeof row.orderStatus === "object"
+      ? row.orderStatus as Record<string, unknown>
+      : null;
+    const brokerOrderId = String(row.brokerOrderId ?? row.orderId ?? row.order_id ?? order?.orderId ?? orderStatus?.orderId ?? "");
+    if (brokerOrderId && !seen.has(brokerOrderId)) {
+      seen.add(brokerOrderId);
+      snapshots.push({
+        brokerOrderId,
+        filledQuantity: Number(row.filledQuantity ?? orderStatus?.filled ?? 0),
+        raw: row,
+        remainingQuantity: Number(row.remainingQuantity ?? orderStatus?.remaining ?? row.quantity ?? order?.totalQuantity ?? 0),
+        status: String(row.status ?? orderStatus?.status ?? "submitted")
+      });
+    }
+    Object.values(row).forEach(visit);
+  }
+
+  visit(input);
+  return snapshots;
+}
+
+function orderOrigin(idempotencyKey?: string) {
+  if (idempotencyKey?.startsWith("schedule:")) return "recurring";
+  if (idempotencyKey?.startsWith("strategy:")) return "strategy";
+  return "manual";
+}
+
+async function insertOrderEvent(
+  client: SupabaseClient,
+  input: { broker: string; brokerOrderId?: string | null; orderId: string; payload?: unknown; status: string }
+) {
+  const { error } = await client.from("order_status_events").insert({
+    broker: input.broker,
+    broker_order_id: input.brokerOrderId ?? null,
+    order_id: input.orderId,
+    payload: input.payload ?? {},
+    status: input.status
+  });
+  if (error) throw new Error(`order event insert failed: ${error.message}`);
 }
 
 async function readRuntimeState(client: SupabaseClient) {
@@ -1459,7 +1532,12 @@ app.get("/api/brokers/:brokerId/accounts", async (c) => {
 });
 
 app.get("/api/brokers/:brokerId/instruments/search", async (c) => {
-  const path = `/brokers/${encodeURIComponent(c.req.param("brokerId"))}/instruments/search?q=${encodeURIComponent(c.req.query("q") ?? "")}`;
+  const query = new URLSearchParams();
+  for (const key of ["q", "assetClass", "currency", "exchange", "tradable", "page", "limit"]) {
+    const value = c.req.query(key);
+    if (value) query.set(key, value);
+  }
+  const path = `/brokers/${encodeURIComponent(c.req.param("brokerId"))}/instruments/search?${query.toString()}`;
   const result = await callBrokerGateway(path);
   return c.json(result.data, result.status >= 400 ? 502 : 200);
 });
@@ -1478,10 +1556,43 @@ app.post("/api/trading/v2/orders/:action", async (c) => {
   const input = parsed.data;
   const client = getSupabase();
   const limits = getRiskSettings(await readDb());
+  let persistedOrderId: string | null = null;
   let duplicate = false;
   if (client && input.idempotencyKey) {
     const result = await client.from("trade_orders").select("id", { count: "exact", head: true }).eq("idempotency_key", input.idempotencyKey);
     duplicate = Boolean(result.count);
+  }
+  if (client && action === "submit") {
+    const inserted = await client.from("trade_orders").insert({
+      account_mode: input.accountMode,
+      broker: input.brokerId,
+      broker_account_id: input.accountId,
+      client_order_id: createId(),
+      conid: input.conid ?? Number(input.instrumentId),
+      idempotency_key: input.idempotencyKey ?? null,
+      instrument_id: input.instrumentId,
+      limit_price: input.limitPrice,
+      normalized_status: "created",
+      order_type: input.orderType,
+      origin: orderOrigin(input.idempotencyKey),
+      quantity: input.quantity,
+      remaining_quantity: input.quantity,
+      side: input.side,
+      status: "created",
+      symbol: input.symbol,
+      tif: input.tif
+    }).select("id").single();
+    if (inserted.error) {
+      const status = inserted.error.code === "23505" ? 409 : 500;
+      return c.json({ ok: false, error: inserted.error.message }, status);
+    }
+    persistedOrderId = inserted.data.id as string;
+    await insertOrderEvent(client, {
+      broker: input.brokerId,
+      orderId: persistedOrderId,
+      payload: input,
+      status: "created"
+    });
   }
   const decision = validateOrderRisk({
     ...input,
@@ -1497,48 +1608,80 @@ app.post("/api/trading/v2/orders/:action", async (c) => {
     stopLoss: input.stopLoss,
     takeProfit: input.takeProfit
   });
-  if (!decision.passed) return c.json({ ok: false, risk: decision }, 400);
+  if (!decision.passed) {
+    if (client && persistedOrderId) {
+      await client.from("trade_orders").update({
+        error_message: decision.reason,
+        normalized_status: "rejected",
+        status: "risk_rejected",
+        updated_at: new Date().toISOString()
+      }).eq("id", persistedOrderId);
+      await Promise.all([
+        client.from("risk_events").insert({
+          metadata: decision.metadata ?? {},
+          order_id: persistedOrderId,
+          passed: false,
+          reason: decision.reason,
+          rule_name: decision.rule
+        }),
+        insertOrderEvent(client, {
+          broker: input.brokerId,
+          orderId: persistedOrderId,
+          payload: decision,
+          status: "rejected"
+        })
+      ]);
+    }
+    return c.json({ ok: false, orderId: persistedOrderId, risk: decision }, 400);
+  }
   if (input.brokerId === "ibkr") await syncExecutorRiskSettings(limits);
   const result = await callBrokerGateway(`/brokers/${input.brokerId}/orders/${action}`, {
     body: JSON.stringify(input),
     method: "POST"
   });
-  if (result.status >= 400) return c.json({ ok: false, broker: result.data }, 502);
-  let persistedOrderId: string | null = null;
-  if (client && action === "submit") {
-    const brokerData = result.data.data as Record<string, unknown> | Array<Record<string, unknown>> | undefined;
-    const first = Array.isArray(brokerData) ? brokerData[0] : brokerData;
-    const brokerOrderId = first && typeof first.brokerOrderId === "string" ? first.brokerOrderId : null;
-    const inserted = await client.from("trade_orders").insert({
-      account_mode: "paper",
-      broker: input.brokerId,
-      broker_account_id: input.accountId,
-      broker_order_id: brokerOrderId,
+  if (result.status >= 400) {
+    if (client && persistedOrderId) {
+      await client.from("trade_orders").update({
+        broker_response: result.data,
+        error_message: JSON.stringify(result.data),
+        normalized_status: "failed",
+        status: "broker_error",
+        updated_at: new Date().toISOString()
+      }).eq("id", persistedOrderId);
+      await insertOrderEvent(client, {
+        broker: input.brokerId,
+        orderId: persistedOrderId,
+        payload: result.data,
+        status: "failed"
+      });
+    }
+    return c.json({ ok: false, broker: result.data, orderId: persistedOrderId }, 502);
+  }
+  if (client && action === "submit" && persistedOrderId) {
+    const snapshots = brokerOrderSnapshots(result.data);
+    const parent = snapshots[0];
+    const normalizedStatus = normalizedOrderStatus(parent?.status ?? "submitted");
+    await client.from("trade_orders").update({
+      broker_order_id: parent?.brokerOrderId ?? null,
       broker_response: result.data,
-      conid: input.conid ?? Number(input.instrumentId),
-      idempotency_key: input.idempotencyKey ?? null,
-      instrument_id: input.instrumentId,
-      limit_price: input.limitPrice,
-      normalized_status: "submitted",
-      order_type: input.orderType,
-      quantity: input.quantity,
-      side: input.side,
-      status: "submitted",
-      symbol: input.symbol,
-      tif: input.tif
-    }).select("id").single();
-    if (inserted.error) return c.json({ ok: false, error: inserted.error.message }, 500);
-    persistedOrderId = inserted.data.id as string;
-    const legs = Array.isArray(brokerData) ? brokerData : [brokerData].filter(Boolean);
+      broker_status: parent?.status ?? "submitted",
+      filled_quantity: parent?.filledQuantity ?? 0,
+      last_reconciled_at: new Date().toISOString(),
+      normalized_status: normalizedStatus,
+      remaining_quantity: parent?.remainingQuantity ?? input.quantity,
+      status: normalizedStatus,
+      submitted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).eq("id", persistedOrderId);
     if (input.stopLoss !== undefined && input.takeProfit !== undefined) {
-      await client.from("order_legs").insert(legs.map((leg, index) => ({
-        broker_order_id: typeof leg?.brokerOrderId === "string" ? leg.brokerOrderId : null,
-        broker_response: leg,
+      await client.from("order_legs").insert(snapshots.slice(0, 3).map((leg, index) => ({
+        broker_order_id: leg.brokerOrderId,
+        broker_response: leg.raw,
         leg_type: index === 0 ? "entry" : index === 1 ? "stop_loss" : "take_profit",
         order_id: persistedOrderId,
         price: index === 0 ? input.limitPrice : index === 1 ? input.stopLoss : input.takeProfit,
         quantity: input.quantity,
-        status: "submitted"
+        status: normalizedOrderStatus(leg.status)
       })));
     }
     await Promise.all([
@@ -1557,12 +1700,12 @@ app.post("/api/trading/v2/orders/:action", async (c) => {
         response_payload: result.data,
         status_code: result.status
       }),
-      client.from("order_status_events").insert({
+      insertOrderEvent(client, {
         broker: input.brokerId,
-        broker_order_id: brokerOrderId,
-        order_id: persistedOrderId,
+        brokerOrderId: parent?.brokerOrderId,
+        orderId: persistedOrderId,
         payload: result.data,
-        status: "submitted"
+        status: normalizedStatus
       })
     ]);
   } else if (action === "submit") {
@@ -1584,6 +1727,124 @@ app.post("/api/trading/v2/orders/:action", async (c) => {
     await writeDb(db);
   }
   return c.json({ ok: true, ...result.data, orderId: persistedOrderId });
+});
+
+app.get("/api/orders", async (c) => {
+  const client = getSupabase();
+  if (!client) return c.json({ ok: true, data: [] });
+  const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 100), 1), 500);
+  let query = client
+    .from("trade_orders")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  const filters = {
+    account_mode: c.req.query("accountMode"),
+    broker: c.req.query("broker"),
+    normalized_status: c.req.query("status"),
+    origin: c.req.query("origin"),
+    symbol: c.req.query("symbol")?.trim().toUpperCase()
+  };
+  for (const [column, value] of Object.entries(filters)) {
+    if (value) query = query.eq(column, value);
+  }
+  const result = await query;
+  if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  return c.json({ ok: true, data: result.data });
+});
+
+app.get("/api/orders/:id/events", async (c) => {
+  const client = getSupabase();
+  if (!client) return c.json({ ok: true, data: [] });
+  const result = await client
+    .from("order_status_events")
+    .select("*")
+    .eq("order_id", c.req.param("id"))
+    .order("created_at", { ascending: true });
+  if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  return c.json({ ok: true, data: result.data });
+});
+
+app.get("/api/orders/:id", async (c) => {
+  const client = getSupabase();
+  if (!client) return c.json({ ok: false, error: "Supabase is required for consolidated order history" }, 503);
+  const [order, legs, events] = await Promise.all([
+    client.from("trade_orders").select("*").eq("id", c.req.param("id")).maybeSingle(),
+    client.from("order_legs").select("*").eq("order_id", c.req.param("id")).order("created_at", { ascending: true }),
+    client.from("order_status_events").select("*").eq("order_id", c.req.param("id")).order("created_at", { ascending: true })
+  ]);
+  const error = order.error ?? legs.error ?? events.error;
+  if (error) return c.json({ ok: false, error: error.message }, 500);
+  if (!order.data) return c.json({ ok: false, error: "order not found" }, 404);
+  return c.json({ ok: true, data: { ...order.data, events: events.data ?? [], legs: legs.data ?? [] } });
+});
+
+app.delete("/api/orders/:id", async (c) => {
+  const client = getSupabase();
+  if (!client) return c.json({ ok: false, error: "Supabase is required for consolidated cancellation" }, 503);
+  const order = await client
+    .from("trade_orders")
+    .select("id,account_mode,broker,broker_account_id,broker_order_id,normalized_status")
+    .eq("id", c.req.param("id"))
+    .maybeSingle();
+  if (order.error) return c.json({ ok: false, error: order.error.message }, 500);
+  if (!order.data) return c.json({ ok: false, error: "order not found" }, 404);
+  if (!order.data.broker_order_id) return c.json({ ok: false, error: "order has no broker order id" }, 409);
+  if (!["created", "submitted", "partially_filled"].includes(order.data.normalized_status)) {
+    return c.json({ ok: false, error: `order cannot be cancelled from status ${order.data.normalized_status}` }, 409);
+  }
+  await client.from("trade_orders").update({
+    cancel_requested_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }).eq("id", order.data.id);
+  await insertOrderEvent(client, {
+    broker: order.data.broker,
+    brokerOrderId: order.data.broker_order_id,
+    orderId: order.data.id,
+    status: "cancel_requested"
+  });
+  const result = await callBrokerGateway(
+    `/brokers/${encodeURIComponent(order.data.broker)}/orders/${encodeURIComponent(order.data.broker_order_id)}`,
+    { method: "DELETE" }
+  );
+  if (result.status >= 400) {
+    await insertOrderEvent(client, {
+      broker: order.data.broker,
+      brokerOrderId: order.data.broker_order_id,
+      orderId: order.data.id,
+      payload: result.data,
+      status: "cancel_failed"
+    });
+    return c.json({ ok: false, broker: result.data }, 502);
+  }
+  const snapshot = brokerOrderSnapshots(result.data)[0];
+  const normalizedStatus = normalizedOrderStatus(snapshot?.status ?? "cancelled");
+  await client.from("trade_orders").update({
+    broker_response: result.data,
+    broker_status: snapshot?.status ?? "Cancelled",
+    cancelled_at: normalizedStatus === "cancelled" ? new Date().toISOString() : null,
+    normalized_status: normalizedStatus,
+    remaining_quantity: snapshot?.remainingQuantity,
+    status: normalizedStatus,
+    updated_at: new Date().toISOString()
+  }).eq("id", order.data.id);
+  await Promise.all([
+    insertOrderEvent(client, {
+      broker: order.data.broker,
+      brokerOrderId: order.data.broker_order_id,
+      orderId: order.data.id,
+      payload: result.data,
+      status: normalizedStatus
+    }),
+    client.from("operator_audit_events").insert({
+      action: "cancel_order",
+      account_mode: order.data.account_mode,
+      metadata: { broker: order.data.broker, brokerOrderId: order.data.broker_order_id, response: result.data },
+      resource_id: order.data.id,
+      resource_type: "trade_order"
+    })
+  ]);
+  return c.json({ ok: true, data: { orderId: order.data.id, status: normalizedStatus } });
 });
 
 app.get("/api/schedules", async (c) => {

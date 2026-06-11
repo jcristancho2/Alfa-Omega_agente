@@ -154,12 +154,30 @@ app.get("/brokers/:brokerId/instruments/search", async (c) => {
   const id = brokerId(c.req.param("brokerId"));
   const query = (c.req.query("q") ?? "").trim();
   if (!query) return c.json({ ok: true, data: [] });
+  const assetClass = c.req.query("assetClass")?.trim().toUpperCase();
+  const currency = c.req.query("currency")?.trim().toUpperCase();
+  const exchange = c.req.query("exchange")?.trim().toUpperCase();
+  const tradable = c.req.query("tradable");
+  const page = Math.max(Number(c.req.query("page") ?? 1), 1);
+  const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 25), 1), 100);
+  const filter = (items: BrokerInstrument[]) => {
+    const filtered = items.filter((item) => {
+      if (assetClass && item.assetClass.toUpperCase() !== assetClass) return false;
+      if (currency && item.currency.toUpperCase() !== currency) return false;
+      if (exchange && item.exchange.toUpperCase() !== exchange) return false;
+      if (tradable === "true" && item.tradable === false) return false;
+      if (tradable === "false" && item.tradable !== false) return false;
+      return true;
+    });
+    return filtered.slice((page - 1) * limit, page * limit);
+  };
   if (id === "simulated") {
     const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
     const needle = normalize(query);
-    return c.json({ ok: true, data: simulatedInstruments.filter((item) => normalize(`${item.symbol} ${item.name}`).includes(needle)) });
+    return c.json({ ok: true, data: filter(simulatedInstruments.filter((item) => normalize(`${item.symbol} ${item.name}`).includes(needle))) });
   }
-  return c.json({ ok: true, data: extractData(await executor(`/instruments/search?q=${encodeURIComponent(query)}`)).instruments ?? [] });
+  const instruments = (extractData(await executor(`/instruments/search?q=${encodeURIComponent(query)}`)).instruments ?? []) as BrokerInstrument[];
+  return c.json({ ok: true, data: filter(instruments) });
 });
 
 app.get("/brokers/:brokerId/instruments/:instrumentId/candles", async (c) => {

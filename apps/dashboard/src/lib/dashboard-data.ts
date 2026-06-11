@@ -34,6 +34,7 @@ export type DashboardData = {
   executionRows: string[][];
   logs: Row[];
   notifications: Row[];
+  operationalOrders: Row[];
   positionRows: string[][];
   risk: Row | null;
   riskSettings: RiskSettings;
@@ -97,6 +98,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     brokerPortfolioData,
     brokerExecutionsData,
     availableBrokers,
+    operationalOrders,
     notifications,
     logs,
     riskSettings
@@ -109,6 +111,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getJson<{ portfolio?: BrokerPortfolioItem[]; positions?: BrokerPortfolioItem[] }>("/api/trading/portfolio"),
     getJson<{ executions?: BrokerExecutionItem[] }>("/api/trading/executions"),
     getJson<Array<{ id: string; name: string }>>("/api/brokers"),
+    getJson<Row[]>("/api/orders?limit=100"),
     getJson<Row[]>("/notifications"),
     getJson<Row[]>("/logs"),
     getJson<RiskSettings>("/api/risk/settings")
@@ -147,6 +150,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     }),
     logs: logs ?? [],
     notifications: notifications ?? [],
+    operationalOrders: operationalOrders ?? [],
     positionRows: positions.slice(0, 30).map((position) => [
       asText(position.contract?.symbol),
       numberValue(position.position),

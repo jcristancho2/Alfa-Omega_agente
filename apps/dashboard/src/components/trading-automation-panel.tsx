@@ -32,6 +32,9 @@ export default function TradingAutomationPanel() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountId, setAccountId] = useState("");
   const [query, setQuery] = useState("AAPL");
+  const [assetClassFilter, setAssetClassFilter] = useState("");
+  const [currencyFilter, setCurrencyFilter] = useState("");
+  const [exchangeFilter, setExchangeFilter] = useState("");
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [instrument, setInstrument] = useState<Instrument | null>(null);
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
@@ -39,6 +42,14 @@ export default function TradingAutomationPanel() {
   const [limitPrice, setLimitPrice] = useState("100");
   const [stopLoss, setStopLoss] = useState("95");
   const [takeProfit, setTakeProfit] = useState("110");
+  const [scheduleAmountType, setScheduleAmountType] = useState<"quantity" | "usd">("quantity");
+  const [scheduleAmount, setScheduleAmount] = useState("1");
+  const [scheduleKind, setScheduleKind] = useState<"interval" | "weekly">("interval");
+  const [intervalCount, setIntervalCount] = useState("1");
+  const [intervalUnit, setIntervalUnit] = useState<"minute" | "hour" | "day">("day");
+  const [weeklyDay, setWeeklyDay] = useState("1");
+  const [weeklyTime, setWeeklyTime] = useState("09:00");
+  const [nextRunAt, setNextRunAt] = useState(() => new Date(Date.now() + 60_000).toISOString().slice(0, 16));
   const [message, setMessage] = useState("");
   const [schedules, setSchedules] = useState<Row[]>([]);
   const [strategies, setStrategies] = useState<Row[]>([]);
@@ -86,11 +97,19 @@ export default function TradingAutomationPanel() {
     })();
   }, [broker]);
 
+  function instrumentSearchPath(value: string) {
+    const params = new URLSearchParams({ limit: "50", page: "1", q: value, tradable: "true" });
+    if (assetClassFilter) params.set("assetClass", assetClassFilter);
+    if (currencyFilter.trim()) params.set("currency", currencyFilter.trim().toUpperCase());
+    if (exchangeFilter.trim()) params.set("exchange", exchangeFilter.trim().toUpperCase());
+    return `/api/brokers/${broker}/instruments/search?${params.toString()}`;
+  }
+
   async function search() {
     if (!query.trim() || busy) return;
     setBusy(true);
     try {
-      setInstruments(await api(`/api/brokers/${broker}/instruments/search?q=${encodeURIComponent(query)}`) as Instrument[]);
+      setInstruments(await api(instrumentSearchPath(query)) as Instrument[]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "search failed");
     } finally {
@@ -103,7 +122,7 @@ export default function TradingAutomationPanel() {
     if (busy) return;
     setBusy(true);
     try {
-      setInstruments(await api(`/api/brokers/${broker}/instruments/search?q=${encodeURIComponent(value)}`) as Instrument[]);
+      setInstruments(await api(instrumentSearchPath(value)) as Instrument[]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "search failed");
     } finally {
@@ -122,12 +141,12 @@ export default function TradingAutomationPanel() {
     };
   }
 
-  async function send(path: string, body: Record<string, unknown>) {
+  async function send(path: string, body: Record<string, unknown>, method = "POST") {
     if (busy) return;
     setBusy(true);
     setMessage("Procesando...");
     try {
-      await api(path, { body: JSON.stringify(body), method: "POST" });
+      await api(path, { body: JSON.stringify(body), method });
       setMessage("Operación registrada");
       await loadConfiguration();
     } catch (error) {
@@ -142,12 +161,19 @@ export default function TradingAutomationPanel() {
       if (!capabilities?.automationEnabled) throw new Error("Recurrencias requieren configurar Supabase");
       const order = orderPayload();
       await send("/api/schedules", {
-        amount: order.quantity, amountType: "quantity", broker, brokerAccountId: accountId,
-        instrumentId: order.instrumentId, intervalCount: 1, intervalUnit: "day",
-        nextRunAt: new Date(Date.now() + 60_000).toISOString(), scheduleKind: "interval", side,
+        amount: Number(scheduleAmount), amountType: scheduleAmountType, broker, brokerAccountId: accountId,
+        instrumentId: order.instrumentId,
+        ...(scheduleKind === "interval"
+          ? { intervalCount: Number(intervalCount), intervalUnit }
+          : { weeklyDays: [Number(weeklyDay)], weeklyTime }),
+        nextRunAt: new Date(nextRunAt).toISOString(), scheduleKind, side,
         stopLoss: order.stopLoss, symbol: order.symbol, takeProfit: order.takeProfit, timezone: "America/Bogota"
       });
     });
+  }
+
+  async function manageSchedule(id: string, action: "pause" | "resume" | "cancel") {
+    await send(`/api/schedules/${encodeURIComponent(id)}/${action}`, {}, "PATCH");
   }
 
   async function createStrategy() {
@@ -194,6 +220,22 @@ export default function TradingAutomationPanel() {
         <button type="button" aria-label="Buscar instrumentos en el broker" title={query.trim() ? "Consulta instrumentos negociables disponibles en el broker seleccionado." : "Escribe un símbolo o nombre antes de buscar."} disabled={busy || !query.trim()} onClick={search} className="h-10 w-full rounded border border-cyan-400/35 bg-cyan-500/15 text-sm font-semibold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-50">Buscar</button>
         </Field>
       </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <Field label="Clase de activo" help="Filtra resultados por ETF, acción u otra clase normalizada por el broker.">
+          <select aria-label="Filtrar por clase de activo" title="Selecciona ETF para mostrar únicamente fondos cotizados identificados por el broker." value={assetClassFilter} onChange={(event) => setAssetClassFilter(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm">
+            <option value="">Todas</option>
+            <option value="ETF">ETF</option>
+            <option value="STK">Acciones</option>
+            <option value="IND">Índices</option>
+          </select>
+        </Field>
+        <Field label="Moneda" help="Filtra por moneda del contrato, por ejemplo USD, EUR o GBP.">
+          <input aria-label="Filtrar instrumentos por moneda" title="Escribe el código de moneda del instrumento." value={currencyFilter} onChange={(event) => setCurrencyFilter(event.target.value)} placeholder="USD" className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm uppercase" />
+        </Field>
+        <Field label="Exchange" help="Filtra por mercado principal, por ejemplo ARCA, NASDAQ o IBIS.">
+          <input aria-label="Filtrar instrumentos por exchange" title="Escribe el mercado principal que deseas consultar." value={exchangeFilter} onChange={(event) => setExchangeFilter(event.target.value)} placeholder="ARCA" className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm uppercase" />
+        </Field>
+      </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {["S&P 500", "Nasdaq 100", "Dow Jones", "Russell 2000", "DAX", "FTSE 100", "Nikkei 225"].map((preset) => <button key={preset} type="button" disabled={busy} onClick={() => void searchPreset(preset)} title={`Busca ${preset} y los instrumentos relacionados disponibles en el broker.`} className="rounded border border-sky-400/20 bg-slate-950/60 px-2.5 py-1.5 text-xs text-slate-300 disabled:cursor-not-allowed disabled:opacity-50">{preset}</button>)}
       </div>
@@ -214,23 +256,56 @@ export default function TradingAutomationPanel() {
         ].map(([label, value, setter, help]) => <label key={label as string} className="block"><span className="mb-1 block text-xs font-semibold text-slate-300">{label as string}</span><span className="mb-2 block min-h-8 text-[11px] leading-4 text-slate-500">{help as string}</span><input aria-label={label as string} title={help as string} value={value as string} onChange={(event) => (setter as (value: string) => void)(event.target.value)} placeholder={label as string} type="number" className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm" /></label>)}
       </div>
       <p className="mt-4 text-xs leading-5 text-slate-500">Acciones: primero usa Preview bracket para validar precios y riesgo. Enviar transmite la orden paper; programar y EMA requieren persistencia Supabase.</p>
+      <div className="mt-4 rounded border border-sky-400/10 bg-slate-950/35 p-3">
+        <h3 className="text-sm font-semibold">Configuración de recurrencia</h3>
+        <p className="mt-1 text-xs leading-5 text-slate-500">La recurrencia reutiliza el instrumento, dirección, cantidad y protección bracket configurados arriba. Cada ejecución vuelve a validar riesgo.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Field label="Tipo de programación" help="Intervalo repite cada N minutos, horas o días; semanal ejecuta un día y hora definidos.">
+            <select aria-label="Tipo de programación recurrente" title="Selecciona cómo se calcularán las siguientes ejecuciones." value={scheduleKind} onChange={(event) => setScheduleKind(event.target.value as "interval" | "weekly")} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm"><option value="interval">Intervalo</option><option value="weekly">Semanal</option></select>
+          </Field>
+          <Field label="Tipo de monto" help="Cantidad usa unidades; USD calcula unidades según el último precio disponible.">
+            <select aria-label="Tipo de monto recurrente" title="Selecciona si la recurrencia opera unidades o un monto en USD." value={scheduleAmountType} onChange={(event) => setScheduleAmountType(event.target.value as "quantity" | "usd")} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm"><option value="quantity">Cantidad</option><option value="usd">Monto USD</option></select>
+          </Field>
+          <Field label="Monto recurrente" help="Unidades o monto USD que se utilizará en cada ejecución.">
+            <input aria-label="Monto de cada recurrencia" title="Define cuánto operará cada ejecución recurrente." type="number" min="0.01" value={scheduleAmount} onChange={(event) => setScheduleAmount(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm" />
+          </Field>
+          {scheduleKind === "interval" ? <>
+            <Field label="Cada N unidades" help="Número de minutos, horas o días entre ejecuciones.">
+              <input aria-label="Cantidad del intervalo" title="Define cada cuántas unidades se ejecutará la recurrencia." type="number" min="1" value={intervalCount} onChange={(event) => setIntervalCount(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm" />
+            </Field>
+            <Field label="Unidad del intervalo" help="Unidad utilizada para calcular la siguiente ejecución.">
+              <select aria-label="Unidad del intervalo" title="Selecciona minutos, horas o días." value={intervalUnit} onChange={(event) => setIntervalUnit(event.target.value as "minute" | "hour" | "day")} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm"><option value="minute">Minutos</option><option value="hour">Horas</option><option value="day">Días</option></select>
+            </Field>
+          </> : <>
+            <Field label="Día semanal" help="Día en que se ejecutará la recurrencia semanal.">
+              <select aria-label="Día semanal de ejecución" title="Selecciona el día semanal." value={weeklyDay} onChange={(event) => setWeeklyDay(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm">{["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"].map((day, index) => <option key={day} value={index}>{day}</option>)}</select>
+            </Field>
+            <Field label="Hora semanal" help="Hora de ejecución interpretada en America/Bogota.">
+              <input aria-label="Hora semanal de ejecución" title="Define la hora semanal en America/Bogota." type="time" value={weeklyTime} onChange={(event) => setWeeklyTime(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm" />
+            </Field>
+          </>}
+          <Field label="Primera ejecución" help="Fecha y hora de la primera ejecución programada.">
+            <input aria-label="Fecha de primera ejecución" title="La recurrencia no se ejecutará antes de esta fecha." type="datetime-local" value={nextRunAt} onChange={(event) => setNextRunAt(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm" />
+          </Field>
+        </div>
+      </div>
       <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <button type="button" aria-label="Previsualizar orden bracket" title={orderReady ? "Valida entrada, stop loss, take profit y riesgo sin enviar la orden." : !instrumentTradable ? "El índice seleccionado es solo referencia; selecciona un ETF, futuro u opción operable." : "Selecciona cuenta e instrumento y configura precios bracket coherentes."} disabled={busy || !orderReady} onClick={() => safely(() => send("/api/trading/v2/orders/preview", orderPayload()))} className="h-10 rounded border border-emerald-400/35 bg-emerald-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50">Preview bracket</button>
         <button type="button" aria-label="Enviar orden bracket paper" title={orderReady ? "Envía una entrada paper protegida con stop loss y take profit." : "Selecciona cuenta e instrumento y configura precios bracket coherentes."} disabled={busy || !orderReady} onClick={() => safely(() => send("/api/trading/v2/orders/submit", orderPayload()))} className="h-10 rounded border border-amber-400/35 bg-amber-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50">Enviar bracket paper</button>
-        <button type="button" aria-label="Crear programación diaria" title={!capabilities?.automationEnabled ? "Requiere configurar Supabase para guardar y ejecutar recurrencias." : orderReady ? "Programa esta orden para ejecutarse diariamente." : "Completa una orden válida antes de programarla."} onClick={createSchedule} className="h-10 rounded border border-sky-400/35 bg-sky-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || !capabilities?.automationEnabled || !orderReady}>Programar diario</button>
+        <button type="button" aria-label="Crear operación recurrente" title={!capabilities?.automationEnabled ? "Requiere configurar Supabase para guardar y ejecutar recurrencias." : orderReady ? "Crea la recurrencia con la configuración indicada." : "Completa una orden válida antes de programarla."} onClick={createSchedule} className="h-10 rounded border border-sky-400/35 bg-sky-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || !capabilities?.automationEnabled || !orderReady || !nextRunAt || Number(scheduleAmount) <= 0 || (scheduleKind === "interval" && Number(intervalCount) <= 0)}>Crear recurrencia</button>
         <button type="button" aria-label="Crear estrategia EMA 9 21 de una hora" title={!capabilities?.automationEnabled ? "Requiere configurar Supabase para guardar y evaluar estrategias." : orderReady ? "Crea una estrategia que opera cruces EMA 9/21 en velas de una hora." : "Completa una orden válida antes de crear la estrategia."} onClick={createStrategy} className="h-10 rounded border border-fuchsia-400/35 bg-fuchsia-500/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || !capabilities?.automationEnabled || !orderReady}>Crear EMA 9/21 · 1h</button>
       </div>
       {!capabilities?.automationEnabled ? <p className="mt-2 text-xs text-amber-300">Recurrencias y estrategias están desactivadas hasta configurar Supabase; búsqueda y órdenes bracket funcionan en modo local.</p> : null}
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <MiniList title="Recurrencias" rows={schedules} detail="next_run_at" />
+        <MiniList title="Recurrencias" rows={schedules} detail="next_run_at" onScheduleAction={manageSchedule} />
         <MiniList title="Estrategias EMA" rows={strategies} detail="timeframe" />
       </div>
     </section>
   );
 }
 
-function MiniList({ detail, rows, title }: { detail: "next_run_at" | "timeframe"; rows: Row[]; title: string }) {
-  return <div className="rounded border border-sky-400/10 bg-slate-950/40 p-3"><h3 className="mb-2 text-sm font-semibold">{title}</h3>{rows.length ? rows.slice(0, 5).map((row) => <div key={row.id} className="flex flex-col gap-1 border-t border-sky-400/10 py-2 text-xs sm:flex-row sm:justify-between"><span>{row.symbol} · {row.status}</span><span className="break-all text-slate-500">{String(row[detail] ?? "-").slice(0, 19)}</span></div>) : <p className="text-xs text-slate-500">Sin configuraciones</p>}</div>;
+function MiniList({ detail, onScheduleAction, rows, title }: { detail: "next_run_at" | "timeframe"; onScheduleAction?: (id: string, action: "pause" | "resume" | "cancel") => Promise<void>; rows: Row[]; title: string }) {
+  return <div className="rounded border border-sky-400/10 bg-slate-950/40 p-3"><h3 className="mb-2 text-sm font-semibold">{title}</h3>{rows.length ? rows.slice(0, 5).map((row) => <div key={row.id} className="border-t border-sky-400/10 py-2 text-xs"><div className="flex flex-col gap-1 sm:flex-row sm:justify-between"><span>{row.symbol} · {row.status}</span><span className="break-all text-slate-500">{String(row[detail] ?? "-").slice(0, 19)}</span></div>{onScheduleAction ? <div className="mt-2 flex flex-wrap gap-2"><button type="button" disabled={row.status !== "active"} onClick={() => onScheduleAction(row.id, "pause")} title="Pausa futuras ejecuciones de esta recurrencia." className="rounded border border-amber-400/20 px-2 py-1 disabled:opacity-30">Pausar</button><button type="button" disabled={row.status !== "paused"} onClick={() => onScheduleAction(row.id, "resume")} title="Reactiva futuras ejecuciones de esta recurrencia." className="rounded border border-emerald-400/20 px-2 py-1 disabled:opacity-30">Reanudar</button><button type="button" disabled={row.status === "cancelled"} onClick={() => onScheduleAction(row.id, "cancel")} title="Cancela definitivamente esta recurrencia." className="rounded border border-rose-400/20 px-2 py-1 disabled:opacity-30">Cancelar</button></div> : null}</div>) : <p className="text-xs text-slate-500">Sin configuraciones</p>}</div>;
 }
 
 function Field({ children, help, label }: { children: React.ReactNode; help: string; label: string }) {

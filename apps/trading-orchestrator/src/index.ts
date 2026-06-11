@@ -12,6 +12,70 @@ const apiUrl = process.env.API_BASE_URL ?? "http://localhost:4000";
 const operatorApiKey = process.env.OPERATOR_API_KEY ?? "";
 const intervalMs = Number(process.env.ORCHESTRATOR_INTERVAL_MS ?? 3000);
 
+function normalizeStatus(status: unknown) {
+  const value = String(status ?? "").replace(/[\s_-]/g, "").toLowerCase();
+  if (value === "filled") return "filled";
+  if (value === "partiallyfilled") return "partially_filled";
+  if (["cancelled", "apicancelled"].includes(value)) return "cancelled";
+  if (["inactive", "rejected"].includes(value)) return "rejected";
+  if (["created", "pending", "apipending", "pendingsubmit", "presubmitted", "submitted"].includes(value)) {
+    return value === "created" ? "created" : "submitted";
+  }
+  return "failed";
+}
+
+interface ReconciledBrokerOrderState {
+  brokerStatus: string;
+  filledQuantity: number;
+  remainingQuantity: number;
+  status: string;
+}
+
+function brokerOrderState(input: unknown): ReconciledBrokerOrderState | null {
+  if (Array.isArray(input)) {
+    for (const value of input) {
+      const result = brokerOrderState(value);
+      if (result) return result;
+    }
+    return null;
+  }
+  if (!input || typeof input !== "object") return null;
+  const row = input as Record<string, unknown>;
+  const orderStatus = row.orderStatus && typeof row.orderStatus === "object"
+    ? row.orderStatus as Record<string, unknown>
+    : null;
+  const brokerStatus = String(row.status ?? orderStatus?.status ?? "");
+  if (brokerStatus) {
+    return {
+        brokerStatus,
+        filledQuantity: Number(row.filledQuantity ?? orderStatus?.filled ?? 0),
+        remainingQuantity: Number(row.remainingQuantity ?? orderStatus?.remaining ?? 0),
+        status: normalizeStatus(brokerStatus)
+    };
+  }
+  for (const value of Object.values(row)) {
+    const result = brokerOrderState(value);
+    if (result) return result;
+  }
+  return null;
+}
+
+function brokerExecutions(input: unknown) {
+  const executions: Array<Record<string, unknown>> = [];
+  function visit(value: unknown) {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const row = value as Record<string, unknown>;
+    if (row.execution && typeof row.execution === "object") executions.push(row);
+    else Object.values(row).forEach(visit);
+  }
+  visit(input);
+  return executions;
+}
+
 async function gateway(path: string, init?: RequestInit) {
   const response = await fetch(`${gatewayUrl}${path}`, {
     ...init,
@@ -98,10 +162,24 @@ async function reconcile() {
   if (error) throw error;
   for (const order of orders ?? []) {
     try {
-      const state = await gateway(`/brokers/${order.broker}/orders/${order.broker_order_id}`) as { status?: string };
-      if (!state?.status || state.status === order.normalized_status) continue;
-      await db.from("trade_orders").update({ normalized_status: state.status, status: state.status, updated_at: new Date().toISOString() }).eq("id", order.id);
-      await db.from("order_status_events").insert({ broker: order.broker, broker_order_id: order.broker_order_id, order_id: order.id, payload: state, status: state.status });
+      const raw = await gateway(`/brokers/${order.broker}/orders/${order.broker_order_id}`);
+      const state = brokerOrderState(raw);
+      if (!state) continue;
+      const timestamp = new Date().toISOString();
+      await db.from("trade_orders").update({
+        broker_status: state.brokerStatus,
+        cancelled_at: state.status === "cancelled" ? timestamp : undefined,
+        filled_at: state.status === "filled" ? timestamp : undefined,
+        filled_quantity: state.filledQuantity,
+        last_reconciled_at: timestamp,
+        normalized_status: state.status,
+        remaining_quantity: state.remainingQuantity,
+        status: state.status,
+        updated_at: timestamp
+      }).eq("id", order.id);
+      if (state.status !== order.normalized_status) {
+        await db.from("order_status_events").insert({ broker: order.broker, broker_order_id: order.broker_order_id, order_id: order.id, payload: raw, status: state.status });
+      }
     } catch (cause) {
       console.error("reconcile failed", order.id, cause);
     }
@@ -114,9 +192,10 @@ async function reconcileBracketLegs() {
   for (const leg of legs ?? []) {
     const relation = leg.trade_orders as unknown as { broker: string };
     try {
-      const state = await gateway(`/brokers/${relation.broker}/orders/${leg.broker_order_id}`) as { status?: string };
-      if (!state.status || state.status === leg.status) continue;
-      await db.from("order_legs").update({ status: state.status, updated_at: new Date().toISOString() }).eq("id", leg.id);
+      const raw = await gateway(`/brokers/${relation.broker}/orders/${leg.broker_order_id}`);
+      const state = brokerOrderState(raw);
+      if (!state || state.status === leg.status) continue;
+      await db.from("order_legs").update({ broker_response: raw, status: state.status, updated_at: new Date().toISOString() }).eq("id", leg.id);
       if (state.status === "filled" && leg.leg_type !== "entry") {
         const { data: siblings } = await db.from("order_legs").select("id,broker_order_id,status").eq("order_id", leg.order_id).neq("id", leg.id).neq("leg_type", "entry").in("status", ["created", "submitted", "partially_filled"]);
         for (const sibling of siblings ?? []) {
@@ -130,8 +209,44 @@ async function reconcileBracketLegs() {
   }
 }
 
+async function reconcileExecutions() {
+  const { data: accounts, error } = await db.from("broker_accounts").select("broker,broker_account_id").eq("enabled", true);
+  if (error) throw error;
+  for (const account of accounts ?? []) {
+    try {
+      const raw = await gateway(`/brokers/${account.broker}/executions?accountId=${encodeURIComponent(account.broker_account_id)}`);
+      for (const row of brokerExecutions(raw)) {
+        const execution = row.execution as Record<string, unknown>;
+        const contract = row.contract && typeof row.contract === "object" ? row.contract as Record<string, unknown> : {};
+        const executionId = String(execution.execId ?? execution.executionId ?? "");
+        if (!executionId) continue;
+        const brokerOrderId = String(execution.orderId ?? execution.order_id ?? "");
+        const order = brokerOrderId
+          ? await db.from("trade_orders").select("id").eq("broker", account.broker).eq("broker_order_id", brokerOrderId).maybeSingle()
+          : { data: null };
+        await db.from("broker_executions").upsert({
+          broker: account.broker,
+          broker_account_id: account.broker_account_id,
+          broker_execution_id: executionId,
+          broker_order_id: brokerOrderId || null,
+          exchange: execution.exchange ?? null,
+          executed_at: execution.time ?? row.time ?? new Date().toISOString(),
+          order_id: order.data?.id ?? null,
+          payload: row,
+          price: Number(execution.price ?? 0),
+          quantity: Number(execution.shares ?? execution.quantity ?? 0),
+          side: execution.side ?? null,
+          symbol: String(contract.symbol ?? execution.symbol ?? "")
+        }, { onConflict: "broker,broker_execution_id" });
+      }
+    } catch (cause) {
+      console.error("execution reconcile failed", account.broker, account.broker_account_id, cause);
+    }
+  }
+}
+
 async function cycle() {
-  await Promise.allSettled([processSchedules(), processStrategies(), reconcile(), reconcileBracketLegs()]);
+  await Promise.allSettled([processSchedules(), processStrategies(), reconcile(), reconcileBracketLegs(), reconcileExecutions()]);
 }
 
 console.log(`Trading orchestrator running every ${intervalMs}ms`);

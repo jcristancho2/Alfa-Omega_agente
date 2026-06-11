@@ -111,7 +111,8 @@ controles de riesgo y quedan auditadas en Supabase.
 - Estrategia EMA configurable por temporalidad.
 - Reconciliación cada 3 segundos y Supabase Realtime con polling de respaldo.
 
-Aplica `supabase/migrations/004_programmed_multibroker_trading.sql` y consulta
+Aplica `supabase/migrations/004_programmed_multibroker_trading.sql` y
+`supabase/migrations/005_operational_order_history.sql`, y consulta
 `docs/programmed-multibroker-runbook.md` antes de activar el orchestrator.
 
 ## Comandos De Prueba Local

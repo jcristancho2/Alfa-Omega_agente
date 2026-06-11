@@ -12,6 +12,7 @@ export type NormalizedOrderStatus =
   | "cancelled"
   | "rejected"
   | "failed";
+export type OrderOrigin = "manual" | "recurring" | "strategy" | "external";
 
 export interface BrokerAccount {
   accountId: string;
@@ -122,6 +123,41 @@ export interface BrokerExecution {
   quantity: number;
   side: OrderSide;
   symbol: string;
+}
+
+export interface OperationalOrder {
+  accountId: string;
+  accountMode: AccountMode;
+  brokerId: BrokerId;
+  brokerOrderId?: string;
+  brokerStatus?: string;
+  cancelledAt?: string;
+  clientOrderId: string;
+  createdAt: string;
+  errorMessage?: string;
+  filledAt?: string;
+  filledQuantity: number;
+  id: string;
+  instrumentId: string;
+  limitPrice?: number;
+  normalizedStatus: NormalizedOrderStatus;
+  origin: OrderOrigin;
+  quantity: number;
+  remainingQuantity: number;
+  side: OrderSide;
+  submittedAt?: string;
+  symbol: string;
+  updatedAt: string;
+}
+
+export interface OrderStatusEvent {
+  brokerId: BrokerId;
+  brokerOrderId?: string;
+  createdAt: string;
+  id: string;
+  orderId: string;
+  payload: unknown;
+  status: NormalizedOrderStatus | string;
 }
 
 export interface BrokerAdapter {

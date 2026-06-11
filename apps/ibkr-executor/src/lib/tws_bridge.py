@@ -118,15 +118,21 @@ def trade_rejection(trade) -> Optional[str]:
 
 
 def instrument_result(contract) -> dict[str, Any]:
+    name = getattr(contract, "description", "") or getattr(contract, "symbol", "")
+    normalized_name = str(name).upper()
+    sec_type = getattr(contract, "secType", "STK") or "STK"
+    asset_class = "ETF" if sec_type == "STK" and any(
+        marker in normalized_name for marker in (" ETF", "ISHARES", "SPDR ", "VANGUARD", "INVESCO QQQ")
+    ) else sec_type
     return {
-        "assetClass": getattr(contract, "secType", "STK") or "STK",
+        "assetClass": asset_class,
         "brokerId": "ibkr",
         "currency": getattr(contract, "currency", "USD") or "USD",
         "exchange": getattr(contract, "primaryExchange", "") or getattr(contract, "exchange", "SMART"),
         "instrumentId": str(getattr(contract, "conId", "")),
-        "name": getattr(contract, "description", "") or getattr(contract, "symbol", ""),
+        "name": name,
         "symbol": getattr(contract, "symbol", ""),
-        "tradable": getattr(contract, "secType", "STK") != "IND",
+        "tradable": sec_type != "IND",
     }
 
 
