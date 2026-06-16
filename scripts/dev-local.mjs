@@ -146,6 +146,7 @@ console.log("ALFA-OMEGA local dev");
 console.log(`API:       ${env.API_BASE_URL}`);
 console.log(`Dashboard: http://localhost:${env.DASHBOARD_PORT}`);
 console.log(`DB:        ${env.LOCAL_DB_PATH}`);
+console.log(`Storage:   ${env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? "supabase" : "local"}`);
 console.log(`IBKR:      ${includeExecutor ? `http://localhost:${env.PORT || "8080"}` : "disabled"}`);
 console.log(`Mode:      ${env.TRADING_MODE}`);
 console.log("Stop:      Ctrl+C\n");

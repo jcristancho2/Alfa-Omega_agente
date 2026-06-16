@@ -926,10 +926,12 @@ function getRiskSnapshot(db: Awaited<ReturnType<typeof readDb>>) {
 }
 
 app.get("/health", (c) => {
+  const persistence = getSupabase() ? "supabase" : "local";
   return c.json({
     ok: true,
     service: "alfa-omega-api",
-    backend: "local",
+    backend: persistence,
+    persistence,
     timestamp: new Date().toISOString()
   });
 });

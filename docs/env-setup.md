@@ -19,6 +19,7 @@ Values that still need real external configuration:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `TRADINGVIEW_WEBHOOK_SECRET`
 - `KAPSO_API_KEY`
 - `KAPSO_PHONE_NUMBER_ID`
@@ -95,6 +96,7 @@ Get values in Supabase:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=same_as_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=same_as_SUPABASE_ANON_KEY
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=same_as_SUPABASE_ANON_KEY
 ```
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` in frontend variables.
@@ -104,6 +106,22 @@ Apply migrations:
 ```bash
 supabase db push
 ```
+
+Copy the existing local JSON data into Supabase once:
+
+```bash
+bun run persistence:migrate
+```
+
+Restart the services and verify persistence:
+
+```bash
+curl http://localhost:4000/api/runtime/capabilities
+curl http://localhost:4000/health
+```
+
+Both responses must report `supabase` persistence. The API, notification worker,
+trading engine, and orchestrator then use Supabase as their shared source of truth.
 
 ## Gemini
 

@@ -17,7 +17,7 @@ export default function DashboardAutoRefresh() {
     }, refreshSeconds * 1000);
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     const client = url && key ? createClient(url, key) : null;
     const channel = client
       ?.channel("operator-dashboard")

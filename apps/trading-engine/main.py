@@ -4,8 +4,10 @@ import time
 import uuid
 from decimal import Decimal
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
+from supabase import Client, create_client
 
 load_dotenv()
 
@@ -16,6 +18,9 @@ RISK_PER_TRADE_PCT = Decimal(os.getenv("RISK_PER_TRADE_PCT", "0.01"))
 MAX_DAILY_RISK_PCT = Decimal(os.getenv("MAX_DAILY_RISK_PCT", "0.03"))
 MAX_OPEN_TRADES = int(os.getenv("MAX_OPEN_TRADES", "3"))
 LOCAL_DB_PATH = Path(os.getenv("LOCAL_DB_PATH", "data/local-db.json"))
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+SUPABASE_CLIENT: Optional[Client] = None
 
 
 def now_iso():
@@ -40,17 +45,76 @@ def seed_db():
     }
 
 
-def read_db():
+def get_supabase():
+    global SUPABASE_CLIENT
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return None
+    if SUPABASE_CLIENT is None:
+        SUPABASE_CLIENT = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    return SUPABASE_CLIENT
+
+
+def read_local_db():
     if not LOCAL_DB_PATH.exists():
-        write_db(seed_db())
+        write_local_db(seed_db())
     with LOCAL_DB_PATH.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def write_db(db):
+def write_local_db(db):
     LOCAL_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with LOCAL_DB_PATH.open("w", encoding="utf-8") as f:
         json.dump(db, f, indent=2)
+
+
+def read_supabase_db(client):
+    status_rows = client.table("bot_status").select("*").order("id").limit(1).execute().data
+    signals = client.table("signals").select("*").order("created_at").execute().data
+    trades = client.table("trades").select("*").order("opened_at").execute().data
+    price_rows = client.table("market_prices").select("*").order("symbol").execute().data
+    notifications = client.table("notifications").select("*").order("created_at").execute().data
+    system_logs = client.table("system_logs").select("*").order("created_at").execute().data
+
+    db = seed_db()
+    if status_rows:
+        db["bot_status"] = status_rows[0]
+    db["signals"] = signals
+    db["trades"] = trades
+    db["market_prices"] = {row["symbol"]: row["price"] for row in price_rows}
+    db["notifications"] = notifications
+    db["system_logs"] = system_logs
+    return db
+
+
+def upsert_rows(client, table, rows, on_conflict):
+    if rows:
+        client.table(table).upsert(rows, on_conflict=on_conflict).execute()
+
+
+def write_supabase_db(db, client):
+    price_rows = [
+        {"symbol": symbol, "price": price, "updated_at": now_iso()}
+        for symbol, price in db.get("market_prices", {}).items()
+    ]
+    upsert_rows(client, "bot_status", [db["bot_status"]], "id")
+    upsert_rows(client, "signals", db["signals"], "id")
+    upsert_rows(client, "trades", db["trades"], "id")
+    upsert_rows(client, "market_prices", price_rows, "symbol")
+    upsert_rows(client, "notifications", db["notifications"], "id")
+    upsert_rows(client, "system_logs", db["system_logs"], "id")
+
+
+def read_db():
+    client = get_supabase()
+    return read_supabase_db(client) if client else read_local_db()
+
+
+def write_db(db):
+    client = get_supabase()
+    if client:
+        write_supabase_db(db, client)
+        return
+    write_local_db(db)
 
 
 def create_notification(db, event_type, message, metadata=None):
@@ -317,7 +381,8 @@ def process_once():
 
 
 def main():
-    print("ALFA-OMEGA Trading Engine iniciado (local data mode)")
+    persistence = "supabase" if get_supabase() else "local"
+    print(f"ALFA-OMEGA Trading Engine iniciado ({persistence} data mode)")
     print(f"Modo: {TRADING_MODE}")
     if TRADING_MODE == "live":
         raise RuntimeError("Live trading is blocked in MVP")

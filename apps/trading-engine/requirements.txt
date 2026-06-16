@@ -1,5 +1,4 @@
 supabase
-supabase
 python-dotenv
 requests
 pydantic

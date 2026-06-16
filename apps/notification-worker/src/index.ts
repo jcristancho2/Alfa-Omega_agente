@@ -29,6 +29,9 @@ async function processNotifications() {
   }
 }
 
-console.log("ALFA-OMEGA notification worker iniciado (local data mode)");
+const persistence = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? "supabase"
+  : "local";
+console.log(`ALFA-OMEGA notification worker iniciado (${persistence} data mode)`);
 setInterval(processNotifications, pollInterval);
 await processNotifications();
