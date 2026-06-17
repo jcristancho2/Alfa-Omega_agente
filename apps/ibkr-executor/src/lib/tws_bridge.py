@@ -16,16 +16,35 @@ def read_payload() -> dict[str, Any]:
     return json.loads(raw or "{}")
 
 
+def local_host_candidates(host: str) -> list[str]:
+    configured = [part.strip() for part in host.split(",") if part.strip()]
+    candidates = configured or ["127.0.0.1"]
+    if any(candidate in ("127.0.0.1", "::1", "localhost") for candidate in candidates):
+        candidates.extend(["::1", "localhost", "127.0.0.1"])
+    unique: list[str] = []
+    for candidate in candidates:
+        if candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
 def connect(action: Optional[str] = None) -> IB:
-    ib = IB()
     host = os.environ.get("IBKR_HOST") or os.environ.get("IBKR_TWS_HOST", "127.0.0.1")
     port = int(os.environ.get("IBKR_PORT") or os.environ.get("IBKR_TWS_PORT", "4002"))
     client_id = int(os.environ.get("IBKR_CLIENT_ID") or os.environ.get("IBKR_TWS_CLIENT_ID", "1"))
     if action in ("accounts", "authStatus", "executions", "historicalData", "marketdata", "openOrders", "orderStatus", "portfolio", "searchInstruments"):
         client_id = client_id + 10 + (os.getpid() % 1000)
     timeout = float(os.environ.get("IBKR_TWS_TIMEOUT_SECONDS", "8"))
-    ib.connect(host, port, clientId=client_id, timeout=timeout)
-    return ib
+    errors: list[str] = []
+    for candidate in local_host_candidates(host):
+        ib = IB()
+        try:
+            ib.connect(candidate, port, clientId=client_id, timeout=timeout)
+            return ib
+        except Exception as exc:
+            errors.append(f"{candidate}:{port} -> {str(exc) or repr(exc) or exc.__class__.__name__}")
+            ib.disconnect()
+    raise ConnectionError("Could not connect to TWS API. Attempts: " + "; ".join(errors))
 
 
 def serialize(value: Any) -> Any:
@@ -182,11 +201,33 @@ def main() -> None:
             return
 
         if action == "marketdata":
+            contract = qualify_contract(ib, payload)
+            ib.reqMarketDataType(1)
+            ticker = ib.reqMktData(contract, "", True, False)
+            ib.sleep(2)
+            if not any(
+                value is not None and isinstance(value, (int, float)) and math.isfinite(value)
+                for value in (ticker.bid, ticker.ask, ticker.last, ticker.close)
+            ):
+                ib.reqMarketDataType(3)
+                ticker = ib.reqMktData(contract, "", True, False)
+                ib.sleep(2)
+            market_price = ticker.marketPrice()
+            ib.cancelMktData(contract)
             print(json.dumps({
+                "ask": serialize(ticker.ask),
+                "bid": serialize(ticker.bid),
+                "close": serialize(ticker.close),
+                "contract": serialize(contract),
+                "currency": getattr(contract, "currency", "USD") or "USD",
+                "exchange": getattr(contract, "primaryExchange", "") or getattr(contract, "exchange", "SMART"),
                 "ok": True,
                 "mode": "tws",
-                "message": "marketdata preflight is not required for TWS order preview",
+                "last": serialize(ticker.last),
+                "marketPrice": serialize(market_price),
+                "symbol": getattr(contract, "symbol", ""),
                 "conid": payload.get("conid"),
+                "tradable": getattr(contract, "secType", "STK") != "IND",
             }))
             return
 
@@ -368,4 +409,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}))
+        message = str(exc) or repr(exc) or exc.__class__.__name__
+        print(json.dumps({"ok": False, "error": message}))

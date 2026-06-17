@@ -6,6 +6,7 @@ import { operatorHeaders } from "@/lib/operator-api";
 type Broker = { id: "ibkr" | "simulated"; name: string };
 type Account = { accountId: string; displayName: string };
 type Instrument = { assetClass: string; instrumentId: string; name: string; symbol: string; exchange: string; currency: string; tradable?: boolean };
+type MarketData = { ask?: number | null; bid?: number | null; close?: number | null; last?: number | null; marketPrice?: number | null; mode?: string; tradable?: boolean };
 type Row = { id: string; status: string; symbol: string; next_run_at?: string; timeframe?: string };
 type Capabilities = { automationEnabled: boolean; operatorAuthRequired: boolean; persistence: string };
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
@@ -37,6 +38,7 @@ export default function TradingAutomationPanel() {
   const [exchangeFilter, setExchangeFilter] = useState("");
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [instrument, setInstrument] = useState<Instrument | null>(null);
+  const [marketData, setMarketData] = useState<MarketData | null>(null);
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [quantity, setQuantity] = useState("1");
   const [limitPrice, setLimitPrice] = useState("100");
@@ -60,7 +62,9 @@ export default function TradingAutomationPanel() {
     ? Number(stopLoss) < Number(limitPrice) && Number(takeProfit) > Number(limitPrice)
     : Number(stopLoss) > Number(limitPrice) && Number(takeProfit) < Number(limitPrice);
   const instrumentTradable = instrument?.tradable !== false && instrument?.assetClass !== "IND";
-  const orderReady = Boolean(instrument && accountId && instrumentTradable) && numericValuesValid && bracketPricesValid;
+  const marketTradable = marketData?.tradable !== false;
+  const orderReady = Boolean(instrument && accountId && instrumentTradable && marketTradable) && numericValuesValid && bracketPricesValid;
+  const livePrice = marketData?.marketPrice ?? marketData?.last ?? marketData?.close ?? null;
 
   async function loadConfiguration() {
     try {
@@ -90,6 +94,7 @@ export default function TradingAutomationPanel() {
         setAccounts(rows);
         setAccountId(rows[0]?.accountId ?? "");
         setInstrument(null);
+        setMarketData(null);
         setInstruments([]);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "accounts failed");
@@ -116,6 +121,28 @@ export default function TradingAutomationPanel() {
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!instrument) {
+      setMarketData(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await api(`/api/brokers/${broker}/instruments/${encodeURIComponent(instrument.instrumentId)}/marketdata`) as MarketData;
+        if (!cancelled) setMarketData(data);
+      } catch (error) {
+        if (!cancelled) {
+          setMarketData(null);
+          setMessage(error instanceof Error ? error.message : "market data failed");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [broker, instrument]);
 
   async function searchPreset(value: string) {
     setQuery(value);
@@ -244,6 +271,13 @@ export default function TradingAutomationPanel() {
         return <button type="button" aria-label={`Seleccionar ${item.symbol}`} title={tradable ? `Selecciona ${item.symbol} (${item.name}) para configurar la operación.` : `${item.symbol} es un índice de referencia no negociable directamente. Selecciona un ETF, futuro u opción relacionada.`} disabled={busy} key={item.instrumentId} onClick={() => setInstrument(item)} className={`rounded border px-3 py-2 text-left text-xs disabled:cursor-not-allowed disabled:opacity-50 ${instrument?.instrumentId === item.instrumentId ? "border-emerald-400/50 bg-emerald-500/10" : "border-sky-400/15 bg-slate-950/50"}`}><span className="flex items-start justify-between gap-2"><strong>{item.symbol}</strong><span className={tradable ? "text-emerald-300" : "text-amber-300"}>{item.assetClass || "N/D"} · {tradable ? "operable" : "referencia"}</span></span><span className="mt-1 block text-slate-300">{item.name}</span><span className="text-slate-500">{item.exchange} · {item.currency} · {item.instrumentId}</span></button>;
       })}</div> : null}
       {instrument && !instrumentTradable ? <p className="mt-3 rounded border border-amber-400/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">El índice {instrument.symbol} sirve como referencia y para consultar velas, pero no puede comprarse directamente. Busca y selecciona un ETF, futuro u opción que replique ese índice.</p> : null}
+      {instrument ? <div className="mt-3 grid gap-2 rounded border border-sky-400/15 bg-slate-950/45 p-3 text-xs sm:grid-cols-5">
+        <div><p className="text-slate-500">Operable</p><p className={instrumentTradable && marketTradable ? "font-semibold text-emerald-300" : "font-semibold text-amber-300"}>{instrumentTradable && marketTradable ? "Sí" : "No"}</p></div>
+        <div><p className="text-slate-500">Precio</p><p className="font-semibold text-slate-100">{livePrice === null ? "-" : Number(livePrice).toFixed(4)}</p></div>
+        <div><p className="text-slate-500">Bid</p><p className="font-semibold text-slate-100">{marketData?.bid == null ? "-" : Number(marketData.bid).toFixed(4)}</p></div>
+        <div><p className="text-slate-500">Ask</p><p className="font-semibold text-slate-100">{marketData?.ask == null ? "-" : Number(marketData.ask).toFixed(4)}</p></div>
+        <button type="button" disabled={livePrice === null} onClick={() => setLimitPrice(String(livePrice))} title="Usa el último precio reportado como límite base." className="h-9 rounded border border-cyan-400/30 bg-cyan-500/10 font-semibold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40">Usar precio</button>
+      </div> : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Field label="Dirección" help="BUY abre una compra; SELL abre una venta.">
         <select aria-label="Dirección de la orden bracket" title="BUY abre una compra; SELL abre una venta." value={side} onChange={(event) => setSide(event.target.value as "BUY" | "SELL")} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm"><option>BUY</option><option>SELL</option></select>

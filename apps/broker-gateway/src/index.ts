@@ -96,6 +96,20 @@ function fakeCandles(instrumentId: string, timeframe: Timeframe, limit: number):
   });
 }
 
+function fakeMarketData(instrumentId: string) {
+  const last = fakeCandles(instrumentId, "1m", 1)[0]?.close ?? 100;
+  return {
+    ask: Number((last + 0.02).toFixed(4)),
+    bid: Number((last - 0.02).toFixed(4)),
+    close: last,
+    conid: instrumentId,
+    last,
+    marketPrice: last,
+    mode: "simulated",
+    tradable: true
+  };
+}
+
 function simulatedOrder(input: OrderRequest, suffix = "", overrides: Partial<BrokerOrder> = {}): BrokerOrder {
   const brokerOrderId = String(++simulatedOrderSequence) + suffix;
   const order: BrokerOrder = {
@@ -187,6 +201,13 @@ app.get("/brokers/:brokerId/instruments/:instrumentId/candles", async (c) => {
   if (id === "simulated") return c.json({ ok: true, data: fakeCandles(c.req.param("instrumentId"), timeframe, limit) });
   const path = `/instruments/${encodeURIComponent(c.req.param("instrumentId"))}/candles?timeframe=${timeframe}&limit=${limit}`;
   return c.json({ ok: true, data: extractData(await executor(path)).candles ?? [] });
+});
+
+app.get("/brokers/:brokerId/instruments/:instrumentId/marketdata", async (c) => {
+  const id = brokerId(c.req.param("brokerId"));
+  const instrumentId = c.req.param("instrumentId");
+  if (id === "simulated") return c.json({ ok: true, data: fakeMarketData(instrumentId) });
+  return c.json({ ok: true, data: extractData(await executor(`/marketdata/${encodeURIComponent(instrumentId)}`)) });
 });
 
 for (const action of ["preview", "submit"] as const) {

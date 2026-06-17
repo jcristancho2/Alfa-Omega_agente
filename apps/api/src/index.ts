@@ -1688,6 +1688,12 @@ app.get("/api/brokers/:brokerId/instruments/:instrumentId/candles", async (c) =>
   return c.json(result.data, result.status >= 400 ? 502 : 200);
 });
 
+app.get("/api/brokers/:brokerId/instruments/:instrumentId/marketdata", async (c) => {
+  const path = `/brokers/${encodeURIComponent(c.req.param("brokerId"))}/instruments/${encodeURIComponent(c.req.param("instrumentId"))}/marketdata`;
+  const result = await callBrokerGateway(path);
+  return c.json(result.data, result.status >= 400 ? 502 : 200);
+});
+
 app.post("/api/trading/v2/orders/:action", async (c) => {
   const action = c.req.param("action");
   if (action !== "preview" && action !== "submit") return c.json({ ok: false, error: "invalid action" }, 404);
