@@ -24,9 +24,16 @@ function normalizeStatus(status: unknown) {
   return "failed";
 }
 
+function nullableNumber(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 interface ReconciledBrokerOrderState {
   brokerStatus: string;
   filledQuantity: number;
+  permId: string | null;
   remainingQuantity: number;
   status: string;
 }
@@ -46,9 +53,13 @@ function brokerOrderState(input: unknown): ReconciledBrokerOrderState | null {
     : null;
   const brokerStatus = String(row.status ?? orderStatus?.status ?? "");
   if (brokerStatus) {
+    const order = row.order && typeof row.order === "object"
+      ? row.order as Record<string, unknown>
+      : null;
     return {
         brokerStatus,
         filledQuantity: Number(row.filledQuantity ?? orderStatus?.filled ?? 0),
+        permId: String(row.permId ?? row.perm_id ?? order?.permId ?? orderStatus?.permId ?? "") || null,
         remainingQuantity: Number(row.remainingQuantity ?? orderStatus?.remaining ?? 0),
         status: normalizeStatus(brokerStatus)
     };
@@ -74,6 +85,39 @@ function brokerExecutions(input: unknown) {
   }
   visit(input);
   return executions;
+}
+
+function brokerPositions(input: unknown) {
+  const positions: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+
+  function add(row: Record<string, unknown>) {
+    const contract = row.contract && typeof row.contract === "object"
+      ? row.contract as Record<string, unknown>
+      : {};
+    const instrumentId = String(contract.conId ?? contract.conid ?? row.instrumentId ?? row.instrument_id ?? "");
+    const symbol = String(contract.symbol ?? row.symbol ?? "");
+    const account = String(row.account ?? row.accountId ?? row.broker_account_id ?? "");
+    const key = `${account}:${instrumentId || symbol}`;
+    const quantity = Number(row.position ?? row.quantity ?? 0);
+    if ((!instrumentId && !symbol) || seen.has(key) || !Number.isFinite(quantity)) return;
+    seen.add(key);
+    positions.push(row);
+  }
+
+  function visit(value: unknown) {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const row = value as Record<string, unknown>;
+    if (row.contract && (row.position !== undefined || row.quantity !== undefined)) add(row);
+    else Object.values(row).forEach(visit);
+  }
+
+  visit(input);
+  return positions;
 }
 
 async function gateway(path: string, init?: RequestInit) {
@@ -167,6 +211,7 @@ async function reconcile() {
       if (!state) continue;
       const timestamp = new Date().toISOString();
       await db.from("trade_orders").update({
+        broker_perm_id: state.permId,
         broker_status: state.brokerStatus,
         cancelled_at: state.status === "cancelled" ? timestamp : undefined,
         filled_at: state.status === "filled" ? timestamp : undefined,
@@ -217,6 +262,9 @@ async function reconcileExecutions() {
       const raw = await gateway(`/brokers/${account.broker}/executions?accountId=${encodeURIComponent(account.broker_account_id)}`);
       for (const row of brokerExecutions(raw)) {
         const execution = row.execution as Record<string, unknown>;
+        const commissionReport = row.commissionReport && typeof row.commissionReport === "object"
+          ? row.commissionReport as Record<string, unknown>
+          : {};
         const contract = row.contract && typeof row.contract === "object" ? row.contract as Record<string, unknown> : {};
         const executionId = String(execution.execId ?? execution.executionId ?? "");
         if (!executionId) continue;
@@ -229,12 +277,15 @@ async function reconcileExecutions() {
           broker_account_id: account.broker_account_id,
           broker_execution_id: executionId,
           broker_order_id: brokerOrderId || null,
+          commission: nullableNumber(commissionReport.commission),
+          commission_currency: commissionReport.currency ?? null,
           exchange: execution.exchange ?? null,
           executed_at: execution.time ?? row.time ?? new Date().toISOString(),
           order_id: order.data?.id ?? null,
           payload: row,
-          price: Number(execution.price ?? 0),
-          quantity: Number(execution.shares ?? execution.quantity ?? 0),
+          price: nullableNumber(execution.price) ?? 0,
+          quantity: nullableNumber(execution.shares ?? execution.quantity) ?? 0,
+          realized_pnl: nullableNumber(commissionReport.realizedPNL),
           side: execution.side ?? null,
           symbol: String(contract.symbol ?? execution.symbol ?? "")
         }, { onConflict: "broker,broker_execution_id" });
@@ -245,8 +296,43 @@ async function reconcileExecutions() {
   }
 }
 
+async function reconcilePositions() {
+  const { data: accounts, error } = await db.from("broker_accounts").select("broker,broker_account_id").eq("enabled", true);
+  if (error) throw error;
+  for (const account of accounts ?? []) {
+    try {
+      const raw = await gateway(`/brokers/${account.broker}/positions?accountId=${encodeURIComponent(account.broker_account_id)}`);
+      for (const row of brokerPositions(raw)) {
+        const contract = row.contract && typeof row.contract === "object" ? row.contract as Record<string, unknown> : {};
+        const instrumentId = String(contract.conId ?? contract.conid ?? row.instrumentId ?? row.instrument_id ?? "");
+        const symbol = String(contract.symbol ?? row.symbol ?? "");
+        if (!instrumentId || !symbol) continue;
+        await db.from("broker_positions").upsert({
+          asset_class: contract.secType ?? row.assetClass ?? null,
+          average_cost: nullableNumber(row.averageCost ?? row.avgCost),
+          broker: account.broker,
+          broker_account_id: String(row.account ?? account.broker_account_id),
+          currency: contract.currency ?? row.currency ?? null,
+          exchange: contract.exchange ?? contract.primaryExchange ?? row.exchange ?? null,
+          instrument_id: instrumentId,
+          market_price: nullableNumber(row.marketPrice),
+          market_value: nullableNumber(row.marketValue),
+          payload: row,
+          quantity: nullableNumber(row.position ?? row.quantity) ?? 0,
+          realized_pnl: nullableNumber(row.realizedPNL),
+          symbol,
+          unrealized_pnl: nullableNumber(row.unrealizedPNL),
+          updated_at: new Date().toISOString()
+        }, { onConflict: "broker,broker_account_id,instrument_id" });
+      }
+    } catch (cause) {
+      console.error("position reconcile failed", account.broker, account.broker_account_id, cause);
+    }
+  }
+}
+
 async function cycle() {
-  await Promise.allSettled([processSchedules(), processStrategies(), reconcile(), reconcileBracketLegs(), reconcileExecutions()]);
+  await Promise.allSettled([processSchedules(), processStrategies(), reconcile(), reconcileBracketLegs(), reconcileExecutions(), reconcilePositions()]);
 }
 
 console.log(`Trading orchestrator running every ${intervalMs}ms`);

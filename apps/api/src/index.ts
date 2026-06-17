@@ -413,6 +413,7 @@ async function callBrokerGateway(path: string, init?: RequestInit) {
 
 interface BrokerOrderSnapshot {
   brokerOrderId: string | null;
+  brokerPermId: string | null;
   filledQuantity: number;
   raw: Record<string, unknown>;
   remainingQuantity: number;
@@ -474,10 +475,12 @@ function brokerOrderSnapshots(input: unknown) {
       ? row.orderStatus as Record<string, unknown>
       : null;
     const brokerOrderId = String(row.brokerOrderId ?? row.orderId ?? row.order_id ?? order?.orderId ?? orderStatus?.orderId ?? "");
+    const brokerPermId = String(row.brokerPermId ?? row.permId ?? row.perm_id ?? order?.permId ?? orderStatus?.permId ?? "");
     if (brokerOrderId && !seen.has(brokerOrderId)) {
       seen.add(brokerOrderId);
       snapshots.push({
         brokerOrderId,
+        brokerPermId: brokerPermId || null,
         filledQuantity: Number(row.filledQuantity ?? orderStatus?.filled ?? 0),
         raw: row,
         remainingQuantity: Number(row.remainingQuantity ?? orderStatus?.remaining ?? row.quantity ?? order?.totalQuantity ?? 0),
@@ -1471,6 +1474,7 @@ async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<T
     const normalizedStatus = isPreview ? "created" : normalizedOrderStatus(parent?.status ?? brokerStatus);
     await updateTradeOrder(client, orderId, {
       broker_order_id: parent?.brokerOrderId ?? null,
+      broker_perm_id: parent?.brokerPermId ?? null,
       broker_status: parent?.status ?? brokerStatus,
       broker_reply_id: executor.data.brokerReplyId ?? null,
       broker_response: executor.data.rawResponse ?? executor.data,
@@ -1817,6 +1821,7 @@ app.post("/api/trading/v2/orders/:action", async (c) => {
     const normalizedStatus = normalizedOrderStatus(parent?.status ?? "submitted");
     await client.from("trade_orders").update({
       broker_order_id: parent?.brokerOrderId ?? null,
+      broker_perm_id: parent?.brokerPermId ?? null,
       broker_response: result.data,
       broker_status: parent?.status ?? "submitted",
       filled_quantity: parent?.filledQuantity ?? 0,

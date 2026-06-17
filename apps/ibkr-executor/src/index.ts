@@ -231,7 +231,7 @@ app.get("/instruments/:conid/candles", async (c) => {
 });
 app.get("/orders/open", async (c) => c.json({ ok: true, ...(await getBrokerOpenOrders()) }));
 app.get("/orders/:orderId", async (c) => c.json({ ok: true, ...(await getBrokerOrderStatus(c.req.param("orderId"))) }));
-app.get("/portfolio", async (c) => c.json({ ok: true, ...(await getBrokerPortfolio()) }));
+app.get("/portfolio", async (c) => c.json({ ok: true, ...(await getBrokerPortfolio(c.req.query("accountId"))) }));
 app.get("/executions", async (c) => c.json({ ok: true, ...(await getBrokerExecutions()) }));
 
 app.post("/orders/preview", async (c) => {

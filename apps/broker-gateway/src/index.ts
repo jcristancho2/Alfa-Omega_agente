@@ -243,7 +243,9 @@ app.get("/brokers/:brokerId/positions", async (c) => {
   const id = brokerId(c.req.param("brokerId"));
   const positions: BrokerPosition[] = [];
   if (id === "simulated") return c.json({ ok: true, data: positions });
-  return c.json({ ok: true, data: extractData(await executor("/portfolio")) });
+  const accountId = c.req.query("accountId");
+  const query = accountId ? `?accountId=${encodeURIComponent(accountId)}` : "";
+  return c.json({ ok: true, data: extractData(await executor(`/portfolio${query}`)) });
 });
 
 app.get("/brokers/:brokerId/executions", async (c) => {

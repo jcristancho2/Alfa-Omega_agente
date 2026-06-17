@@ -152,8 +152,8 @@ export function getTwsOrderStatus(orderId: string) {
   return runTwsBridge({ action: "orderStatus", orderId });
 }
 
-export function getTwsPortfolio() {
-  return runTwsBridge({ accountId: config.ibkrAccountId, action: "portfolio" });
+export function getTwsPortfolio(accountId = config.ibkrAccountId) {
+  return runTwsBridge({ accountId, action: "portfolio" });
 }
 
 export function getTwsExecutions() {

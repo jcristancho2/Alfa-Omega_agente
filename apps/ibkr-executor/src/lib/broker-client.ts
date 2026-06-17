@@ -105,8 +105,8 @@ export function getBrokerOrderStatus(orderId: string) {
   return isTwsMode() ? getTwsOrderStatus(orderId) : getOrderStatus(orderId);
 }
 
-export function getBrokerPortfolio() {
-  return isTwsMode() ? getTwsPortfolio() : getPortfolio(config.ibkrAccountId);
+export function getBrokerPortfolio(accountId = config.ibkrAccountId) {
+  return isTwsMode() ? getTwsPortfolio(accountId) : getPortfolio(accountId);
 }
 
 export function getBrokerExecutions() {
