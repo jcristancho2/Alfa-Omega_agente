@@ -7,6 +7,7 @@ const items = [
   { href: "/", label: "Inicio", help: "Resumen operativo y acceso visual al estado general." },
   { href: "/control", label: "Control del bot", help: "Pausa, reanuda y administra acciones manuales del motor." },
   { href: "/orden-paper", label: "Orden paper IBKR", help: "Lanza operaciones paper por el flujo seguro de ALFA-OMEGA." },
+  { href: "/limites", label: "Límites operativos", help: "Controla cantidad, valor y máximo diario de órdenes enviadas al broker." },
   { href: "/automatizacion", label: "Automatización multi-broker", help: "Busca activos, envía brackets y crea reglas automáticas." },
   { href: "/operaciones", label: "Estado e historial", help: "Revisa órdenes enviadas, posiciones, ejecuciones y cancelaciones." },
   { href: "/senales", label: "Señales", help: "Consulta las señales recibidas y su estado de procesamiento." },

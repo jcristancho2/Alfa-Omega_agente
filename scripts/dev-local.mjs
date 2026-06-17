@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import { isAbsolute, resolve } from "node:path";
-
 const skipExecutor = process.argv.includes("--no-executor");
 
 const defaults = {
@@ -8,15 +6,11 @@ const defaults = {
   API_BASE_URL: "http://localhost:4000",
   NEXT_PUBLIC_API_BASE_URL: "http://localhost:4000",
   DASHBOARD_PORT: "3000",
-  LOCAL_DB_PATH: "data/local-db.json",
   TRADING_MODE: "simulated",
   WORKER_POLL_INTERVAL_SECONDS: "10"
 };
 
 const env = { ...defaults, ...process.env };
-env.LOCAL_DB_PATH = isAbsolute(env.LOCAL_DB_PATH)
-  ? env.LOCAL_DB_PATH
-  : resolve(process.cwd(), env.LOCAL_DB_PATH);
 
 const includeExecutor =
   !skipExecutor && (env.IBKR_CONNECTION_MODE === "tws" || Boolean(env.IBKR_ACCOUNT_ID));
@@ -146,8 +140,7 @@ process.on("SIGTERM", () => shutdown(0));
 console.log("ALFA-OMEGA local dev");
 console.log(`API:       ${env.API_BASE_URL}`);
 console.log(`Dashboard: http://localhost:${env.DASHBOARD_PORT}`);
-console.log(`DB:        ${env.LOCAL_DB_PATH}`);
-console.log(`Storage:   ${env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? "supabase" : "local"}`);
+console.log("Storage:   supabase");
 console.log(`Scheduler: ${includeOrchestrator ? `enabled every ${env.ORCHESTRATOR_INTERVAL_MS || "3000"}ms` : "disabled (missing Supabase env)"}`);
 console.log(`IBKR:      ${includeExecutor ? `http://localhost:${env.PORT || "8080"}` : "disabled"}`);
 console.log(`Mode:      ${env.TRADING_MODE}`);

@@ -1,5 +1,3 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -142,7 +140,6 @@ export const defaultDb = (): LocalDb => ({
   system_logs: []
 });
 
-export const dbPath = process.env.LOCAL_DB_PATH || "data/local-db.json";
 let supabaseClient: SupabaseClient | null = null;
 
 function shouldUseSupabase() {
@@ -151,7 +148,7 @@ function shouldUseSupabase() {
 
 function getSupabase() {
   if (!shouldUseSupabase()) {
-    return null;
+    throw new Error("Supabase is required. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
   }
   if (!supabaseClient) {
     supabaseClient = createClient(
@@ -299,33 +296,14 @@ async function writeSupabaseDb(db: LocalDb, client: SupabaseClient): Promise<voi
   }
 }
 
-export async function readDb(path = dbPath): Promise<LocalDb> {
+export async function readDb(): Promise<LocalDb> {
   const client = getSupabase();
-  if (client) {
-    return readSupabaseDb(client);
-  }
-
-  try {
-    const raw = await readFile(path, "utf8");
-    const db = JSON.parse(raw) as LocalDb & { market_prices?: Record<string, number> };
-    if (!db.market_prices) db.market_prices = {};
-    return db as LocalDb;
-  } catch {
-    const seed = defaultDb();
-    await writeDb(seed, path);
-    return seed;
-  }
+  return readSupabaseDb(client);
 }
 
-export async function writeDb(db: LocalDb, path = dbPath): Promise<void> {
+export async function writeDb(db: LocalDb): Promise<void> {
   const client = getSupabase();
-  if (client) {
-    await writeSupabaseDb(db, client);
-    return;
-  }
-
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(db, null, 2), "utf8");
+  await writeSupabaseDb(db, client);
 }
 
 export function createId(): string {

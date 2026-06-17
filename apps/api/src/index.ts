@@ -148,6 +148,15 @@ const RiskSettingsSchema = z.object({
 
 type RiskSettings = z.infer<typeof RiskSettingsSchema>;
 
+const OrderLimitsSchema = z.object({
+  allowedSymbols: z.array(z.string().trim().min(1)).max(500).default(allowedSymbols).transform((symbols) => [...new Set(symbols.map((symbol) => symbol.toUpperCase()))]),
+  maxDailyOrders: z.number().int().positive().max(10000),
+  maxOrderNotional: z.number().positive(),
+  maxOrderQty: z.number().positive()
+});
+
+type OrderLimits = z.infer<typeof OrderLimitsSchema>;
+
 const defaultRiskSettings: RiskSettings = {
   allowedSymbols,
   maxDailyRiskPct,
@@ -158,6 +167,13 @@ const defaultRiskSettings: RiskSettings = {
   riskPerTradePct
 };
 
+const defaultOrderLimits: OrderLimits = {
+  allowedSymbols,
+  maxDailyOrders: maxDailyTrades,
+  maxOrderNotional,
+  maxOrderQty
+};
+
 function getRiskSettings(db: LocalDb): RiskSettings {
   const latest = db.system_logs
     .filter((log) => log.message === "risk_settings_updated")
@@ -166,13 +182,43 @@ function getRiskSettings(db: LocalDb): RiskSettings {
   return parsed.success ? parsed.data : defaultRiskSettings;
 }
 
+function getOrderLimits(db: LocalDb): OrderLimits {
+  const latest = db.system_logs
+    .filter((log) => log.message === "order_limits_updated")
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  const parsed = OrderLimitsSchema.safeParse(latest?.metadata?.settings);
+  if (parsed.success) return parsed.data;
+  const legacy = getRiskSettings(db);
+  return {
+    allowedSymbols: legacy.allowedSymbols,
+    maxDailyOrders: legacy.maxDailyTrades,
+    maxOrderNotional: legacy.maxOrderNotional,
+    maxOrderQty: legacy.maxOrderQty
+  };
+}
+
 type TradingOrder = z.infer<typeof TradingOrderSchema>;
+type GatewayOrder = z.infer<typeof GatewayOrderSchema>;
 type TradingHttpStatus = 200 | 400 | 500 | 502;
 
 interface TradingHandlerResult {
   body: Record<string, unknown>;
   status: TradingHttpStatus;
 }
+
+type OrderLimitDecision =
+  | {
+      metadata?: Record<string, unknown>;
+      passed: true;
+      reason: null;
+      rule: "order_limits_passed";
+    }
+  | {
+      metadata?: Record<string, unknown>;
+      passed: false;
+      reason: string;
+      rule: "allowed_symbols" | "max_daily_orders" | "max_order_notional" | "max_order_quantity";
+    };
 
 function riskDisabledDecision(accountMode: "paper" | "live", allowLiveTrading: boolean) {
   if (accountMode === "live" && !allowLiveTrading) {
@@ -187,6 +233,93 @@ function riskDisabledDecision(accountMode: "paper" | "live", allowLiveTrading: b
     passed: true,
     reason: null,
     rule: "risk_disabled"
+  };
+}
+
+function startOfTodayIso() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+}
+
+async function countSupabaseOrdersToday(client: SupabaseClient) {
+  const result = await client
+    .from("trade_orders")
+    .select("id", { count: "exact", head: true })
+    .gte("created_at", startOfTodayIso())
+    .not("normalized_status", "in", "(created,rejected,failed,cancelled)");
+  return result.count ?? 0;
+}
+
+function countLocalOrdersToday(db: LocalDb) {
+  const today = new Date().toISOString().slice(0, 10);
+  return db.system_logs.filter((log) => {
+    if (!log.created_at.startsWith(today)) return false;
+    if (log.message !== "local_trading_order" && log.message !== "local_multibroker_order") return false;
+    if (log.metadata?.isPreview === true) return false;
+    return Number(log.metadata?.statusCode ?? 200) < 400;
+  }).length;
+}
+
+async function validateOrderLimits(
+  input: Pick<TradingOrder | GatewayOrder, "limitPrice" | "quantity" | "symbol">,
+  options: { client?: SupabaseClient | null; isPreview: boolean; localDb?: LocalDb }
+): Promise<OrderLimitDecision> {
+  const db = options.localDb ?? await readDb();
+  const limits = getOrderLimits(db);
+  const symbol = input.symbol.trim().toUpperCase();
+  const notional = (input.limitPrice ?? 0) * input.quantity;
+  const metadata = {
+    limits,
+    notional,
+    order: {
+      limitPrice: input.limitPrice ?? null,
+      quantity: input.quantity,
+      symbol
+    }
+  };
+
+  if (limits.allowedSymbols.length > 0 && !limits.allowedSymbols.includes(symbol)) {
+    return {
+      metadata,
+      passed: false,
+      reason: `Symbol ${symbol} is not allowed by operational limits`,
+      rule: "allowed_symbols"
+    };
+  }
+  if (input.quantity > limits.maxOrderQty) {
+    return {
+      metadata,
+      passed: false,
+      reason: `Quantity ${input.quantity} exceeds max order quantity ${limits.maxOrderQty}`,
+      rule: "max_order_quantity"
+    };
+  }
+  if (input.limitPrice !== undefined && notional > limits.maxOrderNotional) {
+    return {
+      metadata,
+      passed: false,
+      reason: `Order notional ${notional} exceeds max order notional ${limits.maxOrderNotional}`,
+      rule: "max_order_notional"
+    };
+  }
+  if (!options.isPreview) {
+    const dailyOrders = options.client
+      ? await countSupabaseOrdersToday(options.client)
+      : countLocalOrdersToday(db);
+    if (dailyOrders >= limits.maxDailyOrders) {
+      return {
+        metadata: { ...metadata, dailyOrders },
+        passed: false,
+        reason: `Daily order limit reached: ${dailyOrders}/${limits.maxDailyOrders}`,
+        rule: "max_daily_orders"
+      };
+    }
+  }
+  return {
+    metadata,
+    passed: true,
+    reason: null,
+    rule: "order_limits_passed"
   };
 }
 
@@ -238,7 +371,7 @@ function getSupabase() {
 function requireSupabase() {
   const client = getSupabase();
   if (!client) {
-    throw new Error("Supabase is required for IBKR trading endpoints");
+    throw new Error("Supabase is required");
   }
   return client;
 }
@@ -485,7 +618,7 @@ async function insertRiskEvent(
   client: SupabaseClient,
   orderId: string,
   signalId: string | null,
-  decision: ReturnType<typeof validateOrderRisk>
+  decision: OrderLimitDecision | ReturnType<typeof validateOrderRisk>
 ) {
   const { error } = await client.from("risk_events").insert({
     metadata: decision.metadata ?? {},
@@ -636,6 +769,27 @@ async function handleLocalTradingOrder(
     await writeDb(db);
     return {
       body: { ok: false, orderId, risk: decision },
+      status: 400
+    };
+  }
+
+  const limitDecision = await validateOrderLimits(input, { isPreview, localDb: db });
+  db.system_logs.push({
+    id: createId(),
+    level: limitDecision.passed ? "info" : "warn",
+    message: "local_order_limits_check",
+    metadata: {
+      decision: limitDecision,
+      isPreview,
+      orderId,
+      order: input
+    },
+    created_at: new Date().toISOString()
+  });
+  if (!limitDecision.passed) {
+    await writeDb(db);
+    return {
+      body: { ok: false, orderId, limits: limitDecision },
       status: 400
     };
   }
@@ -981,14 +1135,14 @@ function getRiskSnapshot(db: Awaited<ReturnType<typeof readDb>>) {
 }
 
 app.get("/health", (c) => {
-  const persistence = getSupabase() ? "supabase" : "local";
+  const supabaseReady = Boolean(getSupabase());
   return c.json({
-    ok: true,
+    ok: supabaseReady,
     service: "alfa-omega-api",
-    backend: persistence,
-    persistence,
+    backend: supabaseReady ? "supabase" : "unconfigured",
+    persistence: supabaseReady ? "supabase" : "unconfigured",
     timestamp: new Date().toISOString()
-  });
+  }, supabaseReady ? 200 : 503);
 });
 
 app.get("/status", async (c) => {
@@ -1345,6 +1499,26 @@ app.post("/api/risk/settings", async (c) => {
   return c.json({ ok: true, data: parsed.data, executorSynced });
 });
 
+app.get("/api/order-limits", async (c) => {
+  const db = await readDb();
+  return c.json({ ok: true, data: getOrderLimits(db) });
+});
+
+app.post("/api/order-limits", async (c) => {
+  const parsed = OrderLimitsSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+  const db = await readDb();
+  db.system_logs.push({
+    id: createId(),
+    level: "info",
+    message: "order_limits_updated",
+    metadata: { settings: parsed.data },
+    created_at: new Date().toISOString()
+  });
+  await writeDb(db);
+  return c.json({ ok: true, data: parsed.data });
+});
+
 async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<TradingHandlerResult> {
   const parsed = TradingOrderSchema.safeParse(input);
   if (!parsed.success) {
@@ -1356,7 +1530,10 @@ async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<T
 
   const client = getSupabase();
   if (!client) {
-    return handleLocalTradingOrder(parsed.data, isPreview);
+    return {
+      body: { ok: false, error: "Supabase is required for trading orders" },
+      status: 503
+    };
   }
 
   const limits = getRiskSettings(await readDb());
@@ -1375,6 +1552,20 @@ async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<T
     });
     return {
       body: { ok: false, orderId, risk: decision },
+      status: 400
+    };
+  }
+
+  const limitDecision = await validateOrderLimits(parsed.data, { client, isPreview });
+  await insertRiskEvent(client, orderId, signalId, limitDecision);
+  if (!limitDecision.passed) {
+    await updateTradeOrder(client, orderId, {
+      error_message: limitDecision.reason,
+      normalized_status: "rejected",
+      status: "limit_rejected"
+    });
+    return {
+      body: { ok: false, orderId, limits: limitDecision },
       status: 400
     };
   }
@@ -1594,7 +1785,7 @@ app.get("/api/runtime/capabilities", (c) =>
       automationEnabled: Boolean(getSupabase()),
       brokerGatewayUrl,
       operatorAuthRequired,
-      persistence: getSupabase() ? "supabase" : "local"
+      persistence: getSupabase() ? "supabase" : "unconfigured"
     }
   })
 );
@@ -1696,6 +1887,34 @@ app.post("/api/trading/v2/orders/:action", async (c) => {
       ]);
     }
     return c.json({ ok: false, orderId: persistedOrderId, risk: decision }, 400);
+  }
+
+  const limitDecision = await validateOrderLimits(input, { client, isPreview: action === "preview" });
+  if (!limitDecision.passed) {
+    if (client && persistedOrderId) {
+      await client.from("trade_orders").update({
+        error_message: limitDecision.reason,
+        normalized_status: "rejected",
+        status: "limit_rejected",
+        updated_at: new Date().toISOString()
+      }).eq("id", persistedOrderId);
+      await Promise.all([
+        client.from("risk_events").insert({
+          metadata: limitDecision.metadata ?? {},
+          order_id: persistedOrderId,
+          passed: false,
+          reason: limitDecision.reason,
+          rule_name: limitDecision.rule
+        }),
+        insertOrderEvent(client, {
+          broker: input.brokerId,
+          orderId: persistedOrderId,
+          payload: limitDecision,
+          status: "rejected"
+        })
+      ]);
+    }
+    return c.json({ ok: false, limits: limitDecision, orderId: persistedOrderId }, 400);
   }
   if (input.brokerId === "ibkr") await syncExecutorRiskSettings(limits);
   const result = await callBrokerGateway(`/brokers/${input.brokerId}/orders/${action}`, {

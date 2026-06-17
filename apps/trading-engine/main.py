@@ -1,9 +1,7 @@
-import json
 import os
 import time
 import uuid
 from decimal import Decimal
-from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -17,7 +15,6 @@ MIN_SCORE = int(os.getenv("MIN_SIGNAL_SCORE", "7"))
 RISK_PER_TRADE_PCT = Decimal(os.getenv("RISK_PER_TRADE_PCT", "0.01"))
 MAX_DAILY_RISK_PCT = Decimal(os.getenv("MAX_DAILY_RISK_PCT", "0.03"))
 MAX_OPEN_TRADES = int(os.getenv("MAX_OPEN_TRADES", "3"))
-LOCAL_DB_PATH = Path(os.getenv("LOCAL_DB_PATH", "data/local-db.json"))
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 SUPABASE_CLIENT: Optional[Client] = None
@@ -48,23 +45,10 @@ def seed_db():
 def get_supabase():
     global SUPABASE_CLIENT
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-        return None
+        raise RuntimeError("Supabase is required. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.")
     if SUPABASE_CLIENT is None:
         SUPABASE_CLIENT = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     return SUPABASE_CLIENT
-
-
-def read_local_db():
-    if not LOCAL_DB_PATH.exists():
-        write_local_db(seed_db())
-    with LOCAL_DB_PATH.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def write_local_db(db):
-    LOCAL_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with LOCAL_DB_PATH.open("w", encoding="utf-8") as f:
-        json.dump(db, f, indent=2)
 
 
 def read_supabase_db(client):
@@ -106,15 +90,12 @@ def write_supabase_db(db, client):
 
 def read_db():
     client = get_supabase()
-    return read_supabase_db(client) if client else read_local_db()
+    return read_supabase_db(client)
 
 
 def write_db(db):
     client = get_supabase()
-    if client:
-        write_supabase_db(db, client)
-        return
-    write_local_db(db)
+    write_supabase_db(db, client)
 
 
 def create_notification(db, event_type, message, metadata=None):
@@ -381,8 +362,8 @@ def process_once():
 
 
 def main():
-    persistence = "supabase" if get_supabase() else "local"
-    print(f"ALFA-OMEGA Trading Engine iniciado ({persistence} data mode)")
+    get_supabase()
+    print("ALFA-OMEGA Trading Engine iniciado (supabase data mode)")
     print(f"Modo: {TRADING_MODE}")
     if TRADING_MODE == "live":
         raise RuntimeError("Live trading is blocked in MVP")

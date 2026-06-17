@@ -12,10 +12,12 @@ const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:400
 
 function getResponseMessage(json: Record<string, unknown>) {
   const risk = json.risk as { reason?: unknown; rule?: unknown } | undefined;
+  const limits = json.limits as { reason?: unknown; rule?: unknown } | undefined;
   const broker = json.broker as { error?: unknown; risk?: { reason?: unknown; rule?: unknown } } | undefined;
   const error = json.error;
 
   if (typeof error === "string") return error;
+  if (limits?.reason) return `${limits.reason}${limits.rule ? ` (${limits.rule})` : ""}`;
   if (risk?.reason) return `${risk.reason}${risk.rule ? ` (${risk.rule})` : ""}`;
   if (broker?.risk?.reason) return `${broker.risk.reason}${broker.risk.rule ? ` (${broker.risk.rule})` : ""}`;
   if (broker?.error) return String(broker.error);
@@ -100,7 +102,7 @@ export default function PaperIbkrOrderPanel() {
         <div>
           <h2 className="text-base font-semibold">Orden paper IBKR</h2>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Lanza operaciones paper por el flujo API, riesgo, executor y broker. El historial se actualiza con el ID local y el ID del broker.
+            Lanza operaciones paper por el flujo API, límites operativos, executor y broker. El historial se actualiza con el ID local y el ID del broker.
           </p>
         </div>
         <span className="rounded bg-emerald-400/10 px-2 py-1 text-[11px] font-semibold text-emerald-200">
@@ -118,10 +120,10 @@ export default function PaperIbkrOrderPanel() {
         <Field label="Dirección" help="BUY compra unidades; SELL vende unidades disponibles.">
           <select aria-label="Dirección de orden IBKR" title="Selecciona BUY para comprar o SELL para vender." value={orderSide} onChange={(event) => setOrderSide(event.target.value as "BUY" | "SELL")} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
         </Field>
-        <Field label="Tipo de orden" help="LMT exige un precio límite; MKT está bloqueada por las reglas actuales.">
-          <select aria-label="Tipo de orden IBKR" title="LMT usa un precio límite; MKT está bloqueada por las reglas actuales." value={orderType} onChange={(event) => setOrderType(event.target.value as OrderType)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"><option value="LMT">LMT</option><option value="MKT">MKT</option></select>
+        <Field label="Tipo de orden" help="LMT exige un precio límite; MKT entra al mercado disponible.">
+          <select aria-label="Tipo de orden IBKR" title="LMT usa un precio límite; MKT entra al mercado disponible." value={orderType} onChange={(event) => setOrderType(event.target.value as OrderType)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"><option value="LMT">LMT</option><option value="MKT">MKT</option></select>
         </Field>
-        <Field label="Cantidad" help="Unidades que se enviarán. Debe respetar los límites de Riesgo.">
+        <Field label="Cantidad" help="Unidades que se enviarán. Debe respetar los límites operativos.">
           <input aria-label="Cantidad de orden IBKR" title="Número de unidades que intentará operar la orden." value={orderQuantity} onChange={(event) => setOrderQuantity(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none" min="0" placeholder="Cantidad" step="1" type="number" />
         </Field>
         <Field label="Vigencia" help="DAY vence al cierre; GTC permanece; IOC cancela lo no ejecutado.">
@@ -133,8 +135,8 @@ export default function PaperIbkrOrderPanel() {
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        <button type="button" aria-label="Previsualizar orden IBKR" title={validOrder ? "Valida riesgo y solicita una previsualización sin enviar la orden." : "Completa símbolo, conid, cantidad y precio límite válidos."} disabled={busy || !validOrder} onClick={() => run("/api/trading/orders/preview")} className="h-10 rounded border border-emerald-400/35 bg-emerald-500/15 px-3 text-sm font-semibold text-emerald-100 disabled:cursor-not-allowed disabled:opacity-50">Preview</button>
-        <button type="button" aria-label="Enviar orden paper a IBKR" title={validOrder ? "Envía la orden a la cuenta paper después de validar el riesgo." : "Completa símbolo, conid, cantidad y precio límite válidos."} disabled={busy || !validOrder} onClick={() => run("/api/trading/orders/submit")} className="h-10 rounded border border-amber-400/35 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100 disabled:cursor-not-allowed disabled:opacity-50">Enviar paper</button>
+        <button type="button" aria-label="Previsualizar orden IBKR" title={validOrder ? "Valida límites operativos y solicita una previsualización sin enviar la orden." : "Completa símbolo, conid, cantidad y precio límite válidos."} disabled={busy || !validOrder} onClick={() => run("/api/trading/orders/preview")} className="h-10 rounded border border-emerald-400/35 bg-emerald-500/15 px-3 text-sm font-semibold text-emerald-100 disabled:cursor-not-allowed disabled:opacity-50">Preview</button>
+        <button type="button" aria-label="Enviar orden paper a IBKR" title={validOrder ? "Envía la orden a la cuenta paper después de validar límites operativos." : "Completa símbolo, conid, cantidad y precio límite válidos."} disabled={busy || !validOrder} onClick={() => run("/api/trading/orders/submit")} className="h-10 rounded border border-amber-400/35 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100 disabled:cursor-not-allowed disabled:opacity-50">Enviar paper</button>
       </div>
 
       <p className="mt-3 min-h-5 font-mono text-xs text-slate-500">
