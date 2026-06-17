@@ -88,6 +88,31 @@ export function numberValue(value: unknown) {
     : "-";
 }
 
+function normalizeBrokerPosition(item: BrokerPortfolioItem | unknown[]) {
+  if (Array.isArray(item)) {
+    if (item.length >= 8 && item[0] && typeof item[0] === "object") {
+      return {
+        account: item[7],
+        averageCost: item[4],
+        contract: item[0] as Row,
+        marketPrice: item[2],
+        position: item[1],
+        realizedPNL: item[6],
+        unrealizedPNL: item[5]
+      } as BrokerPortfolioItem;
+    }
+    if (item.length >= 4 && item[1] && typeof item[1] === "object") {
+      return {
+        account: item[0],
+        averageCost: item[3],
+        contract: item[1] as Row,
+        position: item[2]
+      } as BrokerPortfolioItem;
+    }
+  }
+  return item as BrokerPortfolioItem;
+}
+
 export async function loadDashboardData(): Promise<DashboardData> {
   const [
     status,
@@ -151,7 +176,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     logs: logs ?? [],
     notifications: notifications ?? [],
     operationalOrders: operationalOrders ?? [],
-    positionRows: positions.slice(0, 30).map((position) => [
+    positionRows: positions.slice(0, 30).map(normalizeBrokerPosition).map((position) => [
       asText(position.contract?.symbol),
       numberValue(position.position),
       money(asNumber(position.marketPrice)),

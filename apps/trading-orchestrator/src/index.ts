@@ -91,6 +91,30 @@ function brokerPositions(input: unknown) {
   const positions: Array<Record<string, unknown>> = [];
   const seen = new Set<string>();
 
+  function tupleToPosition(row: unknown[]) {
+    if (row.length >= 8 && row[0] && typeof row[0] === "object") {
+      return {
+        account: row[7],
+        averageCost: row[4],
+        contract: row[0],
+        marketPrice: row[2],
+        marketValue: row[3],
+        position: row[1],
+        realizedPNL: row[6],
+        unrealizedPNL: row[5]
+      };
+    }
+    if (row.length >= 4 && row[1] && typeof row[1] === "object") {
+      return {
+        account: row[0],
+        averageCost: row[3],
+        contract: row[1],
+        position: row[2]
+      };
+    }
+    return null;
+  }
+
   function add(row: Record<string, unknown>) {
     const contract = row.contract && typeof row.contract === "object"
       ? row.contract as Record<string, unknown>
@@ -107,6 +131,11 @@ function brokerPositions(input: unknown) {
 
   function visit(value: unknown) {
     if (Array.isArray(value)) {
+      const position = tupleToPosition(value);
+      if (position) {
+        add(position);
+        return;
+      }
       value.forEach(visit);
       return;
     }
