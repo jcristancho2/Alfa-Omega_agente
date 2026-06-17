@@ -11,6 +11,7 @@ const gatewayApiKey = process.env.BROKER_GATEWAY_API_KEY ?? "";
 const apiUrl = process.env.API_BASE_URL ?? "http://localhost:4000";
 const operatorApiKey = process.env.OPERATOR_API_KEY ?? "";
 const intervalMs = Number(process.env.ORCHESTRATOR_INTERVAL_MS ?? 3000);
+const failedScheduleRetryMs = Number(process.env.ORCHESTRATOR_FAILED_SCHEDULE_RETRY_MS ?? 60_000);
 
 function normalizeStatus(status: unknown) {
   const value = String(status ?? "").replace(/[\s_-]/g, "").toLowerCase();
@@ -178,6 +179,7 @@ async function processSchedules() {
     const idempotencyKey = `schedule:${schedule.id}:${schedule.next_run_at}`;
     const run = await db.from("schedule_runs").insert({ idempotency_key: idempotencyKey, schedule_id: schedule.id, status: "started" }).select("id").single();
     if (run.error) continue;
+    const timestamp = new Date().toISOString();
     try {
       const candles = await gateway(`/brokers/${schedule.broker}/instruments/${schedule.instrument_id}/candles?timeframe=1m&limit=2`) as Candle[];
       const price = candles.at(-1)?.close ?? 0;
@@ -191,15 +193,16 @@ async function processSchedules() {
       });
       await db.from("trade_orders").update({ recurring_schedule_id: schedule.id }).eq("id", order.orderId);
       await db.from("schedule_runs").update({ order_id: order.orderId ?? null, status: "submitted" }).eq("id", run.data.id);
-    } catch (cause) {
-      await db.from("schedule_runs").update({ error_message: cause instanceof Error ? cause.message : String(cause), status: "failed" }).eq("id", run.data.id);
-    } finally {
       const next = nextRunAt({
         intervalCount: schedule.interval_count, intervalUnit: schedule.interval_unit,
         scheduleKind: schedule.schedule_kind, timezone: schedule.timezone,
         weeklyDays: schedule.weekly_days, weeklyTime: schedule.weekly_time
       }, new Date(schedule.next_run_at));
-      await db.from("recurring_schedules").update({ next_run_at: next.toISOString(), updated_at: now.toISOString() }).eq("id", schedule.id);
+      await db.from("recurring_schedules").update({ next_run_at: next.toISOString(), updated_at: timestamp }).eq("id", schedule.id);
+    } catch (cause) {
+      const retryAt = new Date(Date.now() + failedScheduleRetryMs);
+      await db.from("schedule_runs").update({ error_message: cause instanceof Error ? cause.message : String(cause), status: "failed" }).eq("id", run.data.id);
+      await db.from("recurring_schedules").update({ next_run_at: retryAt.toISOString(), updated_at: timestamp }).eq("id", schedule.id);
     }
   }
 }

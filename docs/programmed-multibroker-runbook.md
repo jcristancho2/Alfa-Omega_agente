@@ -59,7 +59,8 @@ trading in API, gateway, executor, or runtime state.
 
 ## Behavior And Checks
 
-- Failed scheduled runs are audited and wait for the next occurrence.
+- Failed scheduled runs are audited and retry after `ORCHESTRATOR_FAILED_SCHEDULE_RETRY_MS`
+  instead of skipping the intended execution window.
 - EMA strategies evaluate only once per candle.
 - The reconciler checks orders and bracket legs every three seconds.
 - When an exit bracket leg fills, the remaining exit leg is cancelled.
