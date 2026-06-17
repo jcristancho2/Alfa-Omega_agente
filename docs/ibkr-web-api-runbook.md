@@ -178,7 +178,7 @@ EXECUTOR_URL=http://localhost:8080 EXECUTOR_API_KEY=$EXECUTOR_API_KEY apps/ibkr-
 
 ## Local App Simulation
 
-The local API can simulate trading orders without Supabase. If `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are empty, `/api/trading/orders/preview` and `/api/trading/orders/submit` use `data/local-db.json` logs and call the executor directly.
+The local API requires Supabase for trading order persistence. Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` before using `/api/trading/orders/preview` or `/api/trading/orders/submit`.
 
 Safe simulation requirements:
 

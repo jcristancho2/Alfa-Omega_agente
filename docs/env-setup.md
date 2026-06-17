@@ -107,12 +107,6 @@ Apply migrations:
 supabase db push
 ```
 
-Copy the existing local JSON data into Supabase once:
-
-```bash
-bun run persistence:migrate
-```
-
 Restart the services and verify persistence:
 
 ```bash
@@ -198,14 +192,13 @@ KAPSO_PHONE_NUMBER_ID=kapso_phone_number_id
 KAPSO_WEBHOOK_SECRET=generated_secret
 ```
 
-## Local-Only Defaults
+## Local Defaults
 
 These can stay as they are for local simulation:
 
 ```bash
 APP_ENV=development
 TRADING_MODE=simulated
-LOCAL_DB_PATH=data/local-db.json
 API_PORT=4000
 API_BASE_URL=http://localhost:4000
 NEXT_PUBLIC_API_BASE_URL=http://localhost:4000

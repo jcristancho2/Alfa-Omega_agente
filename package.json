@@ -20,7 +20,6 @@
     "dev:orchestrator": "bun --cwd apps/trading-orchestrator dev",
     "dev:executor": "bun --cwd apps/ibkr-executor dev",
     "dev:engine": "python3 apps/trading-engine/main.py",
-    "persistence:migrate": "bun scripts/migrate-local-to-supabase.mjs",
     "build": "bun run --filter='*' build",
     "lint": "bun run --filter='*' lint",
     "typecheck": "bun run --filter='*' typecheck",

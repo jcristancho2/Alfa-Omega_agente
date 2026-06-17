@@ -199,7 +199,7 @@ function getOrderLimits(db: LocalDb): OrderLimits {
 
 type TradingOrder = z.infer<typeof TradingOrderSchema>;
 type GatewayOrder = z.infer<typeof GatewayOrderSchema>;
-type TradingHttpStatus = 200 | 400 | 500 | 502;
+type TradingHttpStatus = 200 | 400 | 500 | 502 | 503;
 
 interface TradingHandlerResult {
   body: Record<string, unknown>;
@@ -725,134 +725,6 @@ function statusFromExecutor(data: TradeOrderResponse, isPreview: boolean) {
   if (data.status === "broker_rejected") return "broker_rejected";
   if (data.status === "broker_error") return "broker_error";
   return isPreview ? "previewed" : "submitted";
-}
-
-async function handleLocalTradingOrder(
-  input: TradingOrder,
-  isPreview: boolean
-): Promise<TradingHandlerResult> {
-  const db = await readDb();
-  const limits = getRiskSettings(db);
-  const orderId = createId();
-  const dailyTrades = db.system_logs.filter((log) => {
-    const broker = log.metadata?.broker;
-    const dryRun =
-      typeof broker === "object" &&
-      broker !== null &&
-      "dryRun" in broker &&
-      (broker as { dryRun?: unknown }).dryRun === true;
-
-    return (
-      log.message === "local_trading_order" &&
-      log.metadata?.isPreview === false &&
-      !dryRun &&
-      Number(log.metadata?.statusCode ?? 0) < 400 &&
-      log.created_at.startsWith(new Date().toISOString().slice(0, 10))
-    );
-  }).length;
-  const decision = riskDisabledDecision(input.accountMode, false);
-
-  db.system_logs.push({
-    id: createId(),
-    level: decision.passed ? "info" : "warn",
-    message: "local_trading_risk_check",
-    metadata: {
-      decision,
-      isPreview,
-      orderId,
-      order: input
-    },
-    created_at: new Date().toISOString()
-  });
-
-  if (!decision.passed) {
-    await writeDb(db);
-    return {
-      body: { ok: false, orderId, risk: decision },
-      status: 400
-    };
-  }
-
-  const limitDecision = await validateOrderLimits(input, { isPreview, localDb: db });
-  db.system_logs.push({
-    id: createId(),
-    level: limitDecision.passed ? "info" : "warn",
-    message: "local_order_limits_check",
-    metadata: {
-      decision: limitDecision,
-      isPreview,
-      orderId,
-      order: input
-    },
-    created_at: new Date().toISOString()
-  });
-  if (!limitDecision.passed) {
-    await writeDb(db);
-    return {
-      body: { ok: false, orderId, limits: limitDecision },
-      status: 400
-    };
-  }
-
-  const endpoint = isPreview ? "/orders/preview" : "/orders";
-  try {
-    await syncExecutorRiskSettings(limits);
-    const executor = await callExecutor(endpoint, input);
-    const brokerStatus = executor.status >= 400 ? "broker_error" : statusFromExecutor(executor.data, isPreview);
-    db.system_logs.push({
-      id: createId(),
-      level: executor.status >= 400 ? "error" : "info",
-      message: "local_trading_order",
-      metadata: {
-        broker: executor.data,
-        endpoint,
-        isPreview,
-        order: input,
-        orderId,
-        status: brokerStatus,
-        statusCode: executor.status
-      },
-      created_at: new Date().toISOString()
-    });
-    await writeDb(db);
-
-    if (executor.status >= 400) {
-      return {
-        body: { ok: false, orderId, broker: executor.data },
-        status: executor.status >= 500 ? 502 : 400
-      };
-    }
-
-    return {
-      body: {
-        broker: executor.data,
-        ok: true,
-        orderId,
-        status: brokerStatus
-      },
-      status: 200
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "executor call failed";
-    db.system_logs.push({
-      id: createId(),
-      level: "error",
-      message: "local_trading_order_error",
-      metadata: {
-        endpoint,
-        error: message,
-        isPreview,
-        order: input,
-        orderId
-      },
-      created_at: new Date().toISOString()
-    });
-    await writeDb(db);
-    return {
-      body: { ok: false, orderId, error: message },
-      status: 502
-    };
-  }
 }
 
 function normalizeText(value: string) {

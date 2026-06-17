@@ -328,12 +328,11 @@ Condiciones necesarias:
 
 ## 14. Persistencia de datos
 
-ALFA-OMEGA puede utilizar:
+ALFA-OMEGA utiliza Supabase como fuente de verdad para ordenes, senales,
+notificaciones, automatizacion, auditoria persistente y reconciliacion.
 
-- `data/local-db.json` para desarrollo local y registros simulados.
-- Supabase como fuente de verdad para automatizacion, auditoria persistente y reconciliacion.
-
-La programacion recurrente, estrategias EMA y reconciliacion operativa requieren Supabase.
+La programacion recurrente, estrategias EMA y reconciliacion operativa tambien
+dependen de Supabase.
 
 ## 15. Diagnostico rapido
 

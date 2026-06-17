@@ -7,7 +7,7 @@ Flujo principal:
 ```text
 TradingView / senal manual
   -> apps/api
-  -> Supabase o data/local-db.json
+  -> Supabase
   -> packages/risk-engine
   -> apps/ibkr-executor
   -> IBKR Client Portal Gateway
@@ -27,7 +27,7 @@ El frontend nunca envia ordenes directamente a IBKR. Las ordenes pasan por `apps
 - `apps/trading-orchestrator`: scheduler, estrategia EMA y reconciliación.
 - `packages/risk-engine`: reglas de riesgo antes de enviar ordenes.
 - `packages/trading-types`: tipos compartidos de trading.
-- `packages/shared`: DB local y adaptador Supabase.
+- `packages/shared`: adaptador Supabase compartido.
 - `supabase/functions/tradingview-webhook`: Edge Function para senales externas.
 
 ## Requisitos
@@ -51,7 +51,8 @@ Prepara variables:
 cp .env.example .env
 ```
 
-Para modo local seguro puedes dejar Supabase vacio y usar `LOCAL_DB_PATH=data/local-db.json`.
+Supabase es obligatorio incluso en modo local: configura `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY` y las variables publicas del dashboard antes de iniciar.
 
 ## Ejecutar En Local
 
@@ -73,7 +74,7 @@ URLs:
 - Dashboard: `http://localhost:3000`
 - API: `http://localhost:4000`
 - IBKR executor: `http://localhost:8080`
-- DB local: `data/local-db.json`
+- Persistencia: Supabase
 
 Si quieres levantar la app sin IBKR executor:
 
