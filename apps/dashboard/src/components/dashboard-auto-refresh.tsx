@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 const refreshSeconds = Number(process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_SECONDS || 3);
 
@@ -16,9 +16,7 @@ export default function DashboardAutoRefresh() {
       router.refresh();
     }, refreshSeconds * 1000);
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-    const client = url && key ? createClient(url, key) : null;
+    const client = getSupabaseBrowserClient();
     const channel = client
       ?.channel("operator-dashboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "trade_orders" }, () => router.refresh())

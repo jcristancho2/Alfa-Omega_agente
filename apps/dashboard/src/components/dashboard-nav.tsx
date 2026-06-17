@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const items = [
-  { href: "/", label: "Dashboard", help: "Resumen, controles manuales y estado general." },
-  { href: "/automatizacion", label: "Automatización", help: "Busca activos, envía brackets y crea reglas automáticas." },
-  { href: "/operaciones", label: "Operaciones", help: "Revisa órdenes, posiciones, ejecuciones y operaciones locales." },
+  { href: "/", label: "Inicio", help: "Resumen operativo y acceso visual al estado general." },
+  { href: "/control", label: "Control del bot", help: "Pausa, reanuda y administra acciones manuales del motor." },
+  { href: "/orden-paper", label: "Orden paper IBKR", help: "Lanza operaciones paper por el flujo seguro de ALFA-OMEGA." },
+  { href: "/automatizacion", label: "Automatización multi-broker", help: "Busca activos, envía brackets y crea reglas automáticas." },
+  { href: "/operaciones", label: "Estado e historial", help: "Revisa órdenes enviadas, posiciones, ejecuciones y cancelaciones." },
   { href: "/senales", label: "Señales", help: "Consulta las señales recibidas y su estado de procesamiento." },
-  { href: "/riesgo", label: "Riesgo", help: "Consulta y modifica los límites de protección." },
   { href: "/brokers", label: "Brokers", help: "Comprueba adaptadores, conexión y actividad del broker." },
   { href: "/notificaciones", label: "Notificaciones", help: "Consulta mensajes operativos pendientes y enviados." },
   { href: "/logs", label: "Logs", help: "Revisa la auditoría y los eventos internos." }

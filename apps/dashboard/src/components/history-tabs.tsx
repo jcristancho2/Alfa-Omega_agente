@@ -8,16 +8,12 @@ interface HistoryTabsProps {
   brokerRows: string[][];
   executionRows: string[][];
   positionRows: string[][];
-  signalRows: string[][];
-  tradeRows: string[][];
 }
 
 const brokerHeaders = ["Order ID", "Instrumento", "Dirección", "Cantidad", "Límite", "Estado", "Restante"];
 const brokerHeadersWithActions = [...brokerHeaders, ""];
 const executionHeaders = ["Hora", "Order ID", "Instrumento", "Dirección", "Cantidad", "Precio", "Exchange"];
 const positionHeaders = ["Instrumento", "Posición", "Precio mercado", "Costo prom.", "PnL no realizado", "PnL realizado"];
-const signalHeaders = ["Hora", "Instrumento", "Dirección", "Score", "Estrategia", "Estado"];
-const tradeHeaders = ["Instrumento", "Dirección", "Entrada", "Salida", "PnL", "Estado"];
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
 
 function directionTone(value: string) {
@@ -197,22 +193,18 @@ function BrokerOrdersTable({
 export default function HistoryTabs({
   brokerRows,
   executionRows,
-  positionRows,
-  signalRows,
-  tradeRows
+  positionRows
 }: HistoryTabsProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<
-    "broker" | "executions" | "positions" | "signals" | "trades"
+    "broker" | "executions" | "positions"
   >("broker");
   const [cancelMessage, setCancelMessage] = useState("");
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const tabs = [
     { id: "broker" as const, label: "En curso", count: brokerRows.length },
     { id: "positions" as const, label: "Posiciones", count: positionRows.length },
-    { id: "executions" as const, label: "Historial broker", count: executionRows.length },
-    { id: "signals" as const, label: "Señales", count: signalRows.length },
-    { id: "trades" as const, label: "Operaciones", count: tradeRows.length }
+    { id: "executions" as const, label: "Historial broker", count: executionRows.length }
   ];
 
   async function cancelOrder(orderId: string) {
@@ -244,7 +236,7 @@ export default function HistoryTabs({
           <p className="mt-1 text-xs leading-5 text-slate-500">En curso refleja órdenes abiertas del broker. Historial broker muestra únicamente ejecuciones confirmadas.</p>
           <p className="mt-1 min-h-4 font-mono text-[11px] text-slate-400">{cancelMessage}</p>
         </div>
-        <div className="grid grid-cols-2 gap-1 rounded border border-sky-400/15 bg-slate-950/70 p-1 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-1 rounded border border-sky-400/15 bg-slate-950/70 p-1 sm:grid-cols-3">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -276,12 +268,6 @@ export default function HistoryTabs({
       ) : null}
       {activeTab === "executions" ? (
         <DenseTable directionIndex={3} headers={executionHeaders} rows={executionRows} statusIndex={-1} />
-      ) : null}
-      {activeTab === "signals" ? (
-        <DenseTable directionIndex={2} headers={signalHeaders} rows={signalRows} />
-      ) : null}
-      {activeTab === "trades" ? (
-        <DenseTable directionIndex={1} headers={tradeHeaders} rows={tradeRows} />
       ) : null}
     </section>
   );

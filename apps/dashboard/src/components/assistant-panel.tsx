@@ -76,7 +76,7 @@ function quickPrompts() {
   return ["estado del bot", "riesgo actual", "última señal", "operaciones abiertas"];
 }
 
-export default function AssistantPanel() {
+export default function AssistantPanel({ className = "" }: { className?: string }) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -159,7 +159,7 @@ export default function AssistantPanel() {
   }
 
   return (
-    <section className="rounded-md border border-cyan-400/20 bg-[#07111f] p-4 shadow-[0_12px_36px_rgba(0,0,0,0.24)]">
+    <section className={`rounded-md border border-cyan-400/20 bg-[#07111f] p-4 shadow-[0_12px_36px_rgba(0,0,0,0.24)] ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold">Asistente ALFA</h2>

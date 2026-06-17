@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import DashboardAutoRefresh from "@/components/dashboard-auto-refresh";
 import DashboardNav from "@/components/dashboard-nav";
+import FloatingAssistant from "@/components/floating-assistant";
 
 export default function DashboardShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -64,6 +65,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="min-w-0 pt-14 sm:pt-12">{children}</div>
+      <FloatingAssistant />
     </main>
   );
 }

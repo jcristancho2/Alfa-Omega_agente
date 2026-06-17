@@ -1,4 +1,3 @@
-import RiskSettingsPanel, { type RiskSettings } from "@/components/risk-settings-panel";
 import type { ReactNode } from "react";
 
 type Row = Record<string, unknown>;
@@ -43,47 +42,4 @@ export function ViewSection({ children, description, id, title }: { children: Re
 
 export function stringRows(rows: string[][], keys: string[]) {
   return rows.map((row, index) => Object.fromEntries([["id", row[0] || index], ...keys.map((key, itemIndex) => [key, row[itemIndex]])]));
-}
-
-export default function OperationalViews({
-  brokerRows,
-  logs,
-  notifications,
-  positions,
-  riskSettings,
-  signals,
-  trades
-}: {
-  brokerRows: string[][];
-  logs: Row[];
-  notifications: Row[];
-  positions: string[][];
-  riskSettings: RiskSettings;
-  signals: Row[];
-  trades: Row[];
-}) {
-  const brokerObjects = brokerRows.map((row, index) => ({ id: row[0] || index, symbol: row[1], side: row[2], quantity: row[3], limit: row[4], status: row[5], remaining: row[6] }));
-  const positionObjects = positions.map((row, index) => ({ id: index, symbol: row[0], quantity: row[1], marketPrice: row[2], averageCost: row[3], unrealizedPnl: row[4], realizedPnl: row[5] }));
-  return (
-    <div className="space-y-4">
-      <ViewSection id="operaciones" title="Operaciones" description="Operaciones locales abiertas, cerradas y canceladas.">
-        <DataTable rows={trades} columns={[["symbol", "Instrumento"], ["direction", "Dirección"], ["entry_price", "Entrada"], ["exit_price", "Salida"], ["pnl", "PnL"], ["status", "Estado"]]} />
-      </ViewSection>
-      <ViewSection id="senales" title="Señales" description="Señales recibidas, procesadas o rechazadas por el motor.">
-        <DataTable rows={signals} columns={[["created_at", "Fecha"], ["symbol", "Instrumento"], ["direction", "Dirección"], ["score", "Score"], ["strategy", "Estrategia"], ["status", "Estado"], ["reason", "Motivo"]]} />
-      </ViewSection>
-      <ViewSection id="riesgo" title="Riesgo" description="Configura los límites que protegen todas las órdenes manuales y automáticas.">
-        <RiskSettingsPanel initial={riskSettings} />
-      </ViewSection>
-      <ViewSection id="brokers" title="Brokers y posiciones" description="Órdenes abiertas y posiciones reportadas por el broker.">
-        <div className="space-y-3"><DataTable rows={brokerObjects} columns={[["id", "Order ID"], ["symbol", "Instrumento"], ["side", "Dirección"], ["quantity", "Cantidad"], ["limit", "Límite"], ["status", "Estado"]]} /><DataTable rows={positionObjects} columns={[["symbol", "Instrumento"], ["quantity", "Posición"], ["marketPrice", "Precio"], ["averageCost", "Costo"], ["unrealizedPnl", "PnL no realizado"]]} /></div>
-      </ViewSection>
-      <ViewSection id="notificaciones" title="Notificaciones" description="Mensajes pendientes y enviados por los workers.">
-        <DataTable rows={notifications} columns={[["created_at", "Fecha"], ["channel", "Canal"], ["event_type", "Evento"], ["message", "Mensaje"], ["status", "Estado"]]} />
-      </ViewSection>
-      <ViewSection id="logs" title="Logs" description="Auditoría de acciones, cambios de riesgo y respuestas operativas.">
-        <DataTable rows={logs} columns={[["created_at", "Fecha"], ["level", "Nivel"], ["message", "Evento"], ["metadata", "Metadata"]]} />
-      </ViewSection>
-    </div>
-  );
 }

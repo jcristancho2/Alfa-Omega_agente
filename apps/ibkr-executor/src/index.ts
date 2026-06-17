@@ -1,4 +1,3 @@
-import { validateOrderRisk } from "@alfa-omega/risk-engine";
 import type { TradeOrderResponse } from "@alfa-omega/trading-types";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -122,6 +121,22 @@ function dryRunResponse(status: TradeOrderResponse["status"], rawResponse: unkno
   };
 }
 
+function validateLiveMode(accountMode: "paper" | "live") {
+  if (accountMode === "live" && !config.allowLiveTrading) {
+    return {
+      passed: false,
+      reason: "Live trading is disabled",
+      rule: "live_trading_disabled"
+    };
+  }
+  return {
+    metadata: { riskEngine: "disabled" },
+    passed: true,
+    reason: null,
+    rule: "risk_disabled"
+  };
+}
+
 function normalizeInstrumentSearch(raw: unknown) {
   const rows =
     raw && typeof raw === "object" && "instruments" in raw
@@ -225,16 +240,7 @@ app.post("/orders/preview", async (c) => {
     return c.json({ ok: false, error: parsed.error.flatten() }, 400);
   }
   const accountId = parsed.data.accountId ?? config.ibkrAccountId;
-  const risk = validateOrderRisk({
-    ...parsed.data,
-    allowLiveTrading: config.allowLiveTrading,
-    allowedSymbols: runtimeRiskSettings.allowedSymbols.length ? runtimeRiskSettings.allowedSymbols : undefined,
-    dailyTrades: 0,
-    killSwitch: false,
-    maxDailyTrades: runtimeRiskSettings.maxDailyTrades,
-    maxOrderNotional: runtimeRiskSettings.maxOrderNotional,
-    maxOrderQty: runtimeRiskSettings.maxOrderQty
-  });
+  const risk = validateLiveMode(parsed.data.accountMode);
   if (!risk.passed) {
     return c.json({ ok: false, risk }, 400);
   }
@@ -261,16 +267,7 @@ app.post("/orders", async (c) => {
     return c.json({ ok: false, error: parsed.error.flatten() }, 400);
   }
   const accountId = parsed.data.accountId ?? config.ibkrAccountId;
-  const risk = validateOrderRisk({
-    ...parsed.data,
-    allowLiveTrading: config.allowLiveTrading,
-    allowedSymbols: runtimeRiskSettings.allowedSymbols.length ? runtimeRiskSettings.allowedSymbols : undefined,
-    dailyTrades: 0,
-    killSwitch: false,
-    maxDailyTrades: runtimeRiskSettings.maxDailyTrades,
-    maxOrderNotional: runtimeRiskSettings.maxOrderNotional,
-    maxOrderQty: runtimeRiskSettings.maxOrderQty
-  });
+  const risk = validateLiveMode(parsed.data.accountMode);
   if (!risk.passed) {
     return c.json({ ok: false, risk }, 400);
   }
@@ -307,18 +304,7 @@ for (const action of ["preview", "submit"] as const) {
     const parsed = BracketOrderSchema.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ ok: false, error: parsed.error.flatten() }, 400);
     const accountId = parsed.data.accountId ?? config.ibkrAccountId;
-    const risk = validateOrderRisk({
-      ...parsed.data,
-      allowLiveTrading: config.allowLiveTrading,
-      allowedSymbols: runtimeRiskSettings.allowedSymbols.length ? runtimeRiskSettings.allowedSymbols : undefined,
-      dailyTrades: 0,
-      killSwitch: false,
-      maxDailyTrades: runtimeRiskSettings.maxDailyTrades,
-      maxOrderNotional: runtimeRiskSettings.maxOrderNotional,
-      maxOrderQty: runtimeRiskSettings.maxOrderQty,
-      stopLoss: parsed.data.stopLoss,
-      takeProfit: parsed.data.takeProfit
-    });
+    const risk = validateLiveMode(parsed.data.accountMode);
     if (!risk.passed) return c.json({ ok: false, risk }, 400);
     if (config.dryRun) {
       return c.json({ ok: true, ...dryRunResponse(action === "preview" ? "previewed" : "submitted", { accountId, orders: toIbkrBracket(parsed.data), risk }) });

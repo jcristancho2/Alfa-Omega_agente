@@ -20,6 +20,7 @@ env.LOCAL_DB_PATH = isAbsolute(env.LOCAL_DB_PATH)
 
 const includeExecutor =
   !skipExecutor && (env.IBKR_CONNECTION_MODE === "tws" || Boolean(env.IBKR_ACCOUNT_ID));
+const includeOrchestrator = Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
 
 const services = [
   {
@@ -49,7 +50,7 @@ services.push({
   color: "\x1b[34m"
 });
 
-if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+if (includeOrchestrator) {
   services.push({
     name: "orchestrator",
     command: "bun",
@@ -147,6 +148,7 @@ console.log(`API:       ${env.API_BASE_URL}`);
 console.log(`Dashboard: http://localhost:${env.DASHBOARD_PORT}`);
 console.log(`DB:        ${env.LOCAL_DB_PATH}`);
 console.log(`Storage:   ${env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? "supabase" : "local"}`);
+console.log(`Scheduler: ${includeOrchestrator ? `enabled every ${env.ORCHESTRATOR_INTERVAL_MS || "3000"}ms` : "disabled (missing Supabase env)"}`);
 console.log(`IBKR:      ${includeExecutor ? `http://localhost:${env.PORT || "8080"}` : "disabled"}`);
 console.log(`Mode:      ${env.TRADING_MODE}`);
 console.log("Stop:      Ctrl+C\n");

@@ -104,6 +104,22 @@ const ScheduleSchema = z.object({
   weeklyTime: z.string().regex(/^\d{2}:\d{2}$/).optional()
 });
 
+const PairedWeeklyScheduleSchema = z.object({
+  amount: z.number().positive(),
+  amountType: z.enum(["quantity", "usd"]),
+  broker: z.enum(["ibkr", "simulated"]),
+  brokerAccountId: z.string().min(1),
+  entrySide: z.enum(["BUY", "SELL"]),
+  entryTime: z.string().regex(/^\d{2}:\d{2}$/),
+  exitTime: z.string().regex(/^\d{2}:\d{2}$/),
+  instrumentId: z.string().min(1),
+  symbol: z.string().min(1),
+  timezone: z.string().default("America/Bogota"),
+  weeklyDays: z.array(z.number().int().min(0).max(6)).min(1).max(7)
+}).refine((value) => value.entryTime !== value.exitTime, {
+  message: "entryTime and exitTime must be different"
+});
+
 const StrategySchema = z.object({
   amount: z.number().positive(),
   amountType: z.enum(["quantity", "usd"]),
@@ -156,6 +172,22 @@ type TradingHttpStatus = 200 | 400 | 500 | 502;
 interface TradingHandlerResult {
   body: Record<string, unknown>;
   status: TradingHttpStatus;
+}
+
+function riskDisabledDecision(accountMode: "paper" | "live", allowLiveTrading: boolean) {
+  if (accountMode === "live" && !allowLiveTrading) {
+    return {
+      passed: false,
+      reason: "Live trading is disabled",
+      rule: "live_trading_disabled"
+    };
+  }
+  return {
+    metadata: { riskEngine: "disabled" },
+    passed: true,
+    reason: null,
+    rule: "risk_disabled"
+  };
 }
 
 let supabaseClient: SupabaseClient | null = null;
@@ -264,6 +296,33 @@ function normalizedOrderStatus(status: unknown) {
     return value === "created" ? "created" : "submitted";
   }
   return "failed";
+}
+
+function zonedParts(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: timezone,
+    weekday: "short",
+    year: "numeric"
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
+function nextWeeklyRunAt(weeklyDays: number[], weeklyTime: string, timezone: string, from = new Date()) {
+  const weekdays: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const [targetHour, targetMinute] = weeklyTime.split(":").map(Number);
+  for (let minute = 1; minute <= 8 * 24 * 60; minute += 1) {
+    const candidate = new Date(from.getTime() + minute * 60_000);
+    const parts = zonedParts(candidate, timezone);
+    if (weeklyDays.includes(weekdays[parts.weekday]) && Number(parts.hour) === targetHour && Number(parts.minute) === targetMinute) {
+      return candidate;
+    }
+  }
+  throw new Error("unable to calculate next weekly run");
 }
 
 function brokerOrderSnapshots(input: unknown) {
@@ -383,10 +442,15 @@ async function insertTradeOrder(client: SupabaseClient, input: TradingOrder, sig
     .from("trade_orders")
     .insert({
       account_mode: input.accountMode,
+      broker: "ibkr",
+      broker_account_id: input.accountId ?? null,
       conid: input.conid,
       limit_price: input.limitPrice ?? null,
+      normalized_status: "created",
       order_type: input.orderType,
+      origin: "manual",
       quantity: input.quantity,
+      remaining_quantity: input.quantity,
       side: input.side,
       signal_id: signalId,
       status: "created",
@@ -553,16 +617,7 @@ async function handleLocalTradingOrder(
       log.created_at.startsWith(new Date().toISOString().slice(0, 10))
     );
   }).length;
-  const decision = validateOrderRisk({
-    ...input,
-    allowLiveTrading: false,
-    allowedSymbols: limits.allowedSymbols.length ? limits.allowedSymbols : undefined,
-    dailyTrades,
-    killSwitch: db.bot_status.status === "risk_locked",
-    maxDailyTrades: limits.maxDailyTrades,
-    maxOrderNotional: limits.maxOrderNotional,
-    maxOrderQty: limits.maxOrderQty
-  });
+  const decision = riskDisabledDecision(input.accountMode, false);
 
   db.system_logs.push({
     id: createId(),
@@ -967,6 +1022,21 @@ app.post("/resume", async (c) => {
 
 app.post("/risk/unlock", async (c) => {
   const db = await readDb();
+  const client = getSupabase();
+  if (client) {
+    const result = await client
+      .from("trading_runtime_state")
+      .update({
+        kill_switch: false,
+        trading_mode: "paper",
+        allow_live_trading: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", "global")
+      .select("id")
+      .single();
+    if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  }
   db.bot_status.status = "paused";
   db.bot_status.updated_at = new Date().toISOString();
   db.system_logs.push({
@@ -977,7 +1047,7 @@ app.post("/risk/unlock", async (c) => {
     created_at: new Date().toISOString()
   });
   await writeDb(db);
-  return c.json({ ok: true, status: db.bot_status.status });
+  return c.json({ ok: true, status: db.bot_status.status, killSwitch: false });
 });
 
 app.post("/kapso-webhook", async (c) => {
@@ -1289,27 +1359,18 @@ async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<T
     return handleLocalTradingOrder(parsed.data, isPreview);
   }
 
-  const runtime = await readRuntimeState(client);
   const limits = getRiskSettings(await readDb());
-  const dailyTrades = await countDailyOrders(client);
   const signalId = await insertTradingSignal(client, parsed.data.signal);
   const orderId = await insertTradeOrder(client, parsed.data, signalId);
-  const decision = validateOrderRisk({
-    ...parsed.data,
-    allowLiveTrading: apiAllowLiveTrading && runtime.allow_live_trading,
-    allowedSymbols: limits.allowedSymbols.length ? limits.allowedSymbols : undefined,
-    dailyTrades,
-    killSwitch: runtime.kill_switch,
-    maxDailyTrades: limits.maxDailyTrades,
-    maxOrderNotional: limits.maxOrderNotional,
-    maxOrderQty: limits.maxOrderQty
-  });
+  const runtime = await readRuntimeState(client);
+  const decision = riskDisabledDecision(parsed.data.accountMode, apiAllowLiveTrading && runtime.allow_live_trading);
 
   await insertRiskEvent(client, orderId, signalId, decision);
 
   if (!decision.passed) {
     await updateTradeOrder(client, orderId, {
       error_message: decision.reason,
+      normalized_status: "rejected",
       status: "risk_rejected"
     });
     return {
@@ -1341,10 +1402,20 @@ async function handleTradingOrder(input: unknown, isPreview: boolean): Promise<T
       };
     }
 
+    const snapshots = brokerOrderSnapshots(executor.data.rawResponse ?? executor.data);
+    const parent = snapshots[0];
     const brokerStatus = statusFromExecutor(executor.data, isPreview);
+    const normalizedStatus = isPreview ? "created" : normalizedOrderStatus(parent?.status ?? brokerStatus);
     await updateTradeOrder(client, orderId, {
+      broker_order_id: parent?.brokerOrderId ?? null,
+      broker_status: parent?.status ?? brokerStatus,
       broker_reply_id: executor.data.brokerReplyId ?? null,
       broker_response: executor.data.rawResponse ?? executor.data,
+      filled_quantity: parent?.filledQuantity ?? 0,
+      last_reconciled_at: new Date().toISOString(),
+      normalized_status: normalizedStatus,
+      remaining_quantity: parent?.remainingQuantity ?? parsed.data.quantity,
+      submitted_at: isPreview ? null : new Date().toISOString(),
       status: brokerStatus
     });
 
@@ -1596,20 +1667,10 @@ app.post("/api/trading/v2/orders/:action", async (c) => {
       status: "created"
     });
   }
-  const decision = validateOrderRisk({
-    ...input,
-    allowLiveTrading: false,
-    allowedSymbols: limits.allowedSymbols.length ? limits.allowedSymbols : undefined,
-    conid: input.conid ?? Number(input.instrumentId),
-    dailyTrades: client ? await countDailyOrders(client) : 0,
-    idempotencyKeyExists: duplicate,
-    killSwitch: client ? (await readRuntimeState(client)).kill_switch : false,
-    maxDailyTrades: limits.maxDailyTrades,
-    maxOrderNotional: limits.maxOrderNotional,
-    maxOrderQty: limits.maxOrderQty,
-    stopLoss: input.stopLoss,
-    takeProfit: input.takeProfit
-  });
+  const runtime = client ? await readRuntimeState(client) : { allow_live_trading: false };
+  const decision = duplicate
+    ? { passed: false, reason: "An order with this idempotency key already exists", rule: "duplicate_order" }
+    : riskDisabledDecision(input.accountMode, apiAllowLiveTrading && runtime.allow_live_trading);
   if (!decision.passed) {
     if (client && persistedOrderId) {
       await client.from("trade_orders").update({
@@ -1878,6 +1939,54 @@ app.post("/api/schedules", async (c) => {
     weekly_days: input.weeklyDays ?? null,
     weekly_time: input.weeklyTime ?? null
   }).select().single();
+  if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  return c.json({ ok: true, data: result.data }, 201);
+});
+
+app.post("/api/schedules/paired-weekly", async (c) => {
+  const parsed = PairedWeeklyScheduleSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+  const input = parsed.data;
+  const exitSide = input.entrySide === "BUY" ? "SELL" : "BUY";
+  const rows = [
+    {
+      amount: input.amount,
+      amount_type: input.amountType,
+      broker: input.broker,
+      broker_account_id: input.brokerAccountId,
+      instrument_id: input.instrumentId,
+      interval_count: null,
+      interval_unit: null,
+      next_run_at: nextWeeklyRunAt(input.weeklyDays, input.entryTime, input.timezone).toISOString(),
+      schedule_kind: "weekly",
+      side: input.entrySide,
+      stop_loss: null,
+      symbol: input.symbol,
+      take_profit: null,
+      timezone: input.timezone,
+      weekly_days: input.weeklyDays,
+      weekly_time: input.entryTime
+    },
+    {
+      amount: input.amount,
+      amount_type: input.amountType,
+      broker: input.broker,
+      broker_account_id: input.brokerAccountId,
+      instrument_id: input.instrumentId,
+      interval_count: null,
+      interval_unit: null,
+      next_run_at: nextWeeklyRunAt(input.weeklyDays, input.exitTime, input.timezone).toISOString(),
+      schedule_kind: "weekly",
+      side: exitSide,
+      stop_loss: null,
+      symbol: input.symbol,
+      take_profit: null,
+      timezone: input.timezone,
+      weekly_days: input.weeklyDays,
+      weekly_time: input.exitTime
+    }
+  ];
+  const result = await requireSupabase().from("recurring_schedules").insert(rows).select();
   if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
   return c.json({ ok: true, data: result.data }, 201);
 });

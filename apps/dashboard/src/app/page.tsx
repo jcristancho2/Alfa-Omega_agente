@@ -1,33 +1,10 @@
-import AssistantPanel from "@/components/assistant-panel";
-import ControlPanel from "@/components/control-panel";
 import HistoryTabs from "@/components/history-tabs";
 import PageHeading from "@/components/page-heading";
-import TradingAutomationPanel from "@/components/trading-automation-panel";
 import { asNumber, asText, loadDashboardData, money } from "@/lib/dashboard-data";
 
 export default async function Home() {
   const data = await loadDashboardData();
   const latestSignal = data.signals[0];
-  const closedTrades = data.trades.filter((trade) => asText(trade.status) === "closed");
-  const winRate = closedTrades.length
-    ? (closedTrades.filter((trade) => asNumber(trade.pnl) > 0).length / closedTrades.length) * 100
-    : 0;
-  const signalRows = data.signals.slice(0, 8).map((signal) => [
-    asText(signal.created_at).slice(11, 16),
-    asText(signal.symbol),
-    asText(signal.direction),
-    `${asNumber(signal.score) || "-"}/13`,
-    asText(signal.strategy),
-    asText(signal.status)
-  ]);
-  const tradeRows = data.trades.slice(0, 8).map((trade) => [
-    asText(trade.symbol),
-    asText(trade.direction),
-    String(trade.entry_price ?? "-"),
-    String(trade.exit_price ?? "-"),
-    money(asNumber(trade.pnl)),
-    asText(trade.status)
-  ]);
 
   return (
     <>
@@ -38,23 +15,15 @@ export default async function Home() {
         <StatusCell label="Broker" value={data.brokerOnline ? `Online · ${data.availableBrokers.length} adaptadores` : "Gateway offline"} tone={data.brokerOnline ? "text-emerald-300" : "text-rose-300"} />
       </section>
       <div className="space-y-4 p-3 sm:p-4 lg:p-5">
-        <PageHeading eyebrow="Centro de control" title="Dashboard" description="Resumen del estado operativo. Usa las vistas del menú para profundizar en señales, operaciones, riesgo, brokers, notificaciones y logs." />
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <PageHeading eyebrow="Centro operativo" title="Inicio" description="Resumen del estado operativo. Las acciones de bot, órdenes paper IBKR, automatización e historial viven en vistas separadas del menú." />
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Capital local" value={money(asNumber(data.status?.capital))} detail="Capital informado por el motor" />
           <MetricCard label="PnL diario" value={money(asNumber(data.status?.daily_pnl))} detail="Resultado acumulado del día" />
           <MetricCard label="Órdenes broker" value={String(data.brokerRows.length)} detail="Órdenes abiertas reportadas" />
           <MetricCard label="Posiciones" value={String(data.positionRows.length)} detail="Posiciones activas del broker" />
           <MetricCard label="Señales" value={String(data.signals.length)} detail={`Última: ${asText(latestSignal?.symbol)}`} />
-          <MetricCard label="Operaciones locales" value={String(data.trades.length)} detail={`Win rate cerrado: ${winRate.toFixed(0)}%`} />
         </section>
-        <section className="grid items-start gap-4 2xl:grid-cols-[minmax(0,3fr)_minmax(320px,1fr)]">
-          <div className="min-w-0 space-y-4">
-            <ControlPanel />
-            <TradingAutomationPanel />
-          </div>
-          <AssistantPanel />
-        </section>
-        <HistoryTabs brokerRows={data.brokerRows} executionRows={data.executionRows} positionRows={data.positionRows} signalRows={signalRows} tradeRows={tradeRows} />
+        <HistoryTabs brokerRows={data.brokerRows} executionRows={data.executionRows} positionRows={data.positionRows} />
       </div>
     </>
   );
