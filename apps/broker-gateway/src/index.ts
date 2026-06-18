@@ -276,5 +276,5 @@ app.get("/brokers/:brokerId/executions", async (c) => {
   return c.json({ ok: true, data: extractData(await executor("/executions")) });
 });
 
-Bun.serve({ fetch: app.fetch, hostname: "0.0.0.0", port });
+Bun.serve({ fetch: app.fetch, hostname: "0.0.0.0", idleTimeout: 60, port });
 console.log(`Broker Gateway running on http://localhost:${port}`);

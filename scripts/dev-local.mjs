@@ -24,12 +24,6 @@ const services = [
     color: "\x1b[36m"
   },
   {
-    name: "engine",
-    command: "python3",
-    args: ["apps/trading-engine/main.py"],
-    color: "\x1b[35m"
-  },
-  {
     name: "notify",
     command: "bun",
     args: ["--cwd", "apps/notification-worker", "dev"],
@@ -113,8 +107,10 @@ function startService(service) {
     if (shuttingDown) return;
 
     const detail = signal ? `signal ${signal}` : `code ${code}`;
-    console.error(`${service.color}[${service.name}]${reset} exited with ${detail}`);
-    shutdown(code || 1);
+    console.error(`${service.color}[${service.name}]${reset} exited with ${detail} — restarting in 3s`);
+    setTimeout(() => {
+      if (!shuttingDown) startService(service);
+    }, 3000);
   });
 }
 

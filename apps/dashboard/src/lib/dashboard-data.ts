@@ -53,15 +53,23 @@ const defaultRiskSettings: RiskSettings = {
   riskPerTradePct: 0.01
 };
 
+const dashboardFetchTimeoutMs = Number(process.env.DASHBOARD_FETCH_TIMEOUT_MS ?? 2500);
+
 export async function getJson<T>(path: string): Promise<T | null> {
   const baseUrl = process.env.API_BASE_URL || "http://localhost:4000";
+  const controller = new AbortController();
+  const timeout = Number.isFinite(dashboardFetchTimeoutMs) && dashboardFetchTimeoutMs > 0
+    ? setTimeout(() => controller.abort(), dashboardFetchTimeoutMs)
+    : null;
   try {
-    const res = await fetch(`${baseUrl}${path}`, { cache: "no-store" });
+    const res = await fetch(`${baseUrl}${path}`, { cache: "no-store", signal: controller.signal });
     if (!res.ok) return null;
     const json = (await res.json()) as ApiResult<T>;
     return json.data;
   } catch {
     return null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 

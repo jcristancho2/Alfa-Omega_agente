@@ -337,6 +337,7 @@ app.delete("/orders/:orderId", async (c) => {
 Bun.serve({
   fetch: app.fetch,
   hostname: "0.0.0.0",
+  idleTimeout: 60,
   port: config.port
 });
 

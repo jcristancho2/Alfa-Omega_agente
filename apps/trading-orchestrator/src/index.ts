@@ -13,6 +13,17 @@ const operatorApiKey = process.env.OPERATOR_API_KEY ?? "";
 const intervalMs = Number(process.env.ORCHESTRATOR_INTERVAL_MS ?? 3000);
 const failedScheduleRetryMs = Number(process.env.ORCHESTRATOR_FAILED_SCHEDULE_RETRY_MS ?? 60_000);
 
+async function notify(eventType: string, message: string) {
+  await db.from("notifications").insert({
+    channel: "whatsapp",
+    event_type: eventType,
+    message,
+    status: "pending",
+  }).then(({ error }) => {
+    if (error) console.error("[notify] insert failed", error.message);
+  });
+}
+
 function normalizeStatus(status: unknown) {
   const value = String(status ?? "").replace(/[\s_-]/g, "").toLowerCase();
   if (value === "filled") return "filled";
@@ -171,8 +182,18 @@ async function submitOrder(input: Record<string, unknown>) {
   return result;
 }
 
+function isMarketOpen(now: Date): boolean {
+  const day = now.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const h = now.getUTCHours();
+  const m = now.getUTCMinutes();
+  const minutes = h * 60 + m;
+  return minutes >= 14 * 60 + 30 && minutes < 21 * 60; // 9:30–16:00 ET = 14:30–21:00 UTC
+}
+
 async function processSchedules() {
   const now = new Date();
+  if (!isMarketOpen(now)) return;
   const { data: schedules, error } = await db.from("recurring_schedules").select("*").eq("status", "active").lte("next_run_at", now.toISOString()).limit(20);
   if (error) throw error;
   for (const schedule of schedules ?? []) {
@@ -183,8 +204,13 @@ async function processSchedules() {
     try {
       const candles = await gateway(`/brokers/${schedule.broker}/instruments/${schedule.instrument_id}/candles?timeframe=1m&limit=2`) as Candle[];
       const price = candles.at(-1)?.close ?? 0;
+      if (price <= 0) {
+        await db.from("schedule_runs").update({ error_message: "market price unavailable", status: "failed" }).eq("id", run.data.id);
+        await db.from("recurring_schedules").update({ next_run_at: new Date(Date.now() + 60_000).toISOString(), updated_at: timestamp }).eq("id", schedule.id);
+        continue;
+      }
       const quantity = schedule.amount_type === "usd" ? quantityFromUsd(Number(schedule.amount), price) : Number(schedule.amount);
-      if (quantity <= 0) throw new Error("calculated quantity is zero");
+      if (quantity <= 0) throw new Error(`insufficient amount: $${schedule.amount} USD buys 0 shares of ${schedule.symbol} at $${price.toFixed(2)}`);
       const order = await submitOrder({
         accountId: schedule.broker_account_id, accountMode: "paper", brokerId: schedule.broker,
         idempotencyKey, instrumentId: schedule.instrument_id, conid: Number(schedule.instrument_id),
@@ -193,6 +219,7 @@ async function processSchedules() {
       });
       await db.from("trade_orders").update({ recurring_schedule_id: schedule.id }).eq("id", order.orderId);
       await db.from("schedule_runs").update({ order_id: order.orderId ?? null, status: "submitted" }).eq("id", run.data.id);
+      await notify("order_submitted", `📈 ${schedule.symbol} ${schedule.side} ${schedule.amount}${schedule.amount_type === "usd" ? " USD" : " units"} @ ${price} — orden enviada`);
       const next = nextRunAt({
         intervalCount: schedule.interval_count, intervalUnit: schedule.interval_unit,
         scheduleKind: schedule.schedule_kind, timezone: schedule.timezone,
@@ -201,8 +228,10 @@ async function processSchedules() {
       await db.from("recurring_schedules").update({ next_run_at: next.toISOString(), updated_at: timestamp }).eq("id", schedule.id);
     } catch (cause) {
       const retryAt = new Date(Date.now() + failedScheduleRetryMs);
-      await db.from("schedule_runs").update({ error_message: cause instanceof Error ? cause.message : String(cause), status: "failed" }).eq("id", run.data.id);
+      const errMsg = cause instanceof Error ? cause.message : String(cause);
+      await db.from("schedule_runs").update({ error_message: errMsg, status: "failed" }).eq("id", run.data.id);
       await db.from("recurring_schedules").update({ next_run_at: retryAt.toISOString(), updated_at: timestamp }).eq("id", schedule.id);
+      await notify("order_failed", `⚠️ ${schedule.symbol} orden fallida: ${errMsg}`);
     }
   }
 }
@@ -220,7 +249,7 @@ async function processStrategies() {
       await db.from("strategy_configs").update({ last_evaluated_candle: latest.timestamp, updated_at: new Date().toISOString() }).eq("id", strategy.id);
       if (!signal || run.error) continue;
       const quantity = strategy.amount_type === "usd" ? quantityFromUsd(Number(strategy.amount), latest.close) : Number(strategy.amount);
-      if (quantity <= 0) throw new Error("calculated quantity is zero");
+      if (quantity <= 0) throw new Error(`insufficient amount: $${strategy.amount} USD buys 0 shares of ${strategy.symbol} at $${latest.close.toFixed(2)}`);
       const stopLoss = signal === "BUY" ? latest.close * (1 - strategy.stop_loss_percent / 100) : latest.close * (1 + strategy.stop_loss_percent / 100);
       const takeProfit = signal === "BUY" ? latest.close * (1 + strategy.take_profit_percent / 100) : latest.close * (1 - strategy.take_profit_percent / 100);
       const idempotencyKey = `strategy:${strategy.id}:${latest.timestamp}`;
@@ -256,6 +285,11 @@ async function reconcile() {
       }).eq("id", order.id);
       if (state.status !== order.normalized_status) {
         await db.from("order_status_events").insert({ broker: order.broker, broker_order_id: order.broker_order_id, order_id: order.id, payload: raw, status: state.status });
+        if (state.status === "filled") {
+          await notify("order_filled", `✅ Orden ${order.broker_order_id} ejecutada (filled) — broker: ${order.broker}`);
+        } else if (state.status === "cancelled" || state.status === "rejected") {
+          await notify("order_cancelled", `❌ Orden ${order.broker_order_id} ${state.status} — broker: ${order.broker}`);
+        }
       }
     } catch (cause) {
       console.error("reconcile failed", order.id, cause);

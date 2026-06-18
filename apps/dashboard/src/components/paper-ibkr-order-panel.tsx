@@ -5,7 +5,6 @@ import { useState } from "react";
 import { operatorHeaders } from "@/lib/operator-api";
 
 type Status = "idle" | "loading" | "done" | "error";
-type OrderType = "LMT" | "MKT";
 type TimeInForce = "DAY" | "GTC" | "IOC";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
@@ -33,7 +32,6 @@ export default function PaperIbkrOrderPanel() {
   const [orderSide, setOrderSide] = useState<"BUY" | "SELL">("BUY");
   const [orderLimitPrice, setOrderLimitPrice] = useState("100");
   const [orderQuantity, setOrderQuantity] = useState("1");
-  const [orderType, setOrderType] = useState<OrderType>("LMT");
   const [orderTif, setOrderTif] = useState<TimeInForce>("DAY");
   const busy = status === "loading";
   const validTicker = /^[A-Z0-9._-]+$/.test(orderSymbol.trim());
@@ -42,20 +40,19 @@ export default function PaperIbkrOrderPanel() {
     Number.isInteger(Number(orderConid)) &&
     Number(orderConid) > 0 &&
     Number(orderQuantity) > 0 &&
-    (orderType !== "LMT" || Number(orderLimitPrice) > 0);
+    Number(orderLimitPrice) > 0;
 
   function orderPayload() {
     const payload: Record<string, unknown> = {
       accountMode: "paper",
       conid: Number(orderConid),
-      orderType,
+      limitPrice: Number(orderLimitPrice),
+      orderType: "LMT",
       quantity: Number(orderQuantity),
       side: orderSide,
       symbol: orderSymbol,
       tif: orderTif
     };
-
-    if (orderType === "LMT") payload.limitPrice = Number(orderLimitPrice);
 
     return {
       ...payload,
@@ -106,7 +103,7 @@ export default function PaperIbkrOrderPanel() {
           </p>
         </div>
         <span className="rounded bg-emerald-400/10 px-2 py-1 text-[11px] font-semibold text-emerald-200">
-          {orderType} x{orderQuantity || "-"} {orderTif}
+          LMT x{orderQuantity || "-"} {orderTif}
         </span>
       </div>
 
@@ -120,8 +117,8 @@ export default function PaperIbkrOrderPanel() {
         <Field label="Dirección" help="BUY compra unidades; SELL vende unidades disponibles.">
           <select aria-label="Dirección de orden IBKR" title="Selecciona BUY para comprar o SELL para vender." value={orderSide} onChange={(event) => setOrderSide(event.target.value as "BUY" | "SELL")} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
         </Field>
-        <Field label="Tipo de orden" help="LMT exige un precio límite; MKT entra al mercado disponible.">
-          <select aria-label="Tipo de orden IBKR" title="LMT usa un precio límite; MKT entra al mercado disponible." value={orderType} onChange={(event) => setOrderType(event.target.value as OrderType)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"><option value="LMT">LMT</option><option value="MKT">MKT</option></select>
+        <Field label="Tipo de orden" help="Solo LMT disponible en modo TWS. Requiere precio límite.">
+          <div className="flex h-10 items-center rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-400">LMT</div>
         </Field>
         <Field label="Cantidad" help="Unidades que se enviarán. Debe respetar los límites operativos.">
           <input aria-label="Cantidad de orden IBKR" title="Número de unidades que intentará operar la orden." value={orderQuantity} onChange={(event) => setOrderQuantity(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none" min="0" placeholder="Cantidad" step="1" type="number" />
@@ -129,8 +126,8 @@ export default function PaperIbkrOrderPanel() {
         <Field label="Vigencia" help="DAY vence al cierre; GTC permanece; IOC cancela lo no ejecutado.">
           <select aria-label="Vigencia de orden IBKR" title="DAY vence al cierre, GTC permanece activa e IOC cancela lo no ejecutado." value={orderTif} onChange={(event) => setOrderTif(event.target.value as TimeInForce)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none"><option value="DAY">DAY</option><option value="GTC">GTC</option><option value="IOC">IOC</option></select>
         </Field>
-        <Field label="Precio límite" help="Máximo de compra o mínimo de venta usado por una orden LMT.">
-          <input aria-label="Precio límite de orden IBKR" title="Precio máximo de compra o mínimo de venta para una orden LMT." value={orderLimitPrice} onChange={(event) => setOrderLimitPrice(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none disabled:cursor-not-allowed disabled:opacity-50" disabled={orderType === "MKT"} placeholder="Limit price" />
+        <Field label="Precio límite" help="Máximo de compra o mínimo de venta. Requerido para LMT.">
+          <input aria-label="Precio límite de orden IBKR" title="Precio máximo de compra o mínimo de venta para la orden LMT." value={orderLimitPrice} onChange={(event) => setOrderLimitPrice(event.target.value)} className="h-10 w-full rounded border border-sky-400/15 bg-slate-950/80 px-3 text-sm text-slate-200 outline-none" placeholder="Limit price" />
         </Field>
       </div>
 

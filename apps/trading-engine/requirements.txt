@@ -1,6 +1,0 @@
-supabase
-python-dotenv
-requests
-pydantic
-pandas
-numpy

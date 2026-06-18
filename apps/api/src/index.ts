@@ -104,6 +104,22 @@ const ScheduleSchema = z.object({
   weeklyTime: z.string().regex(/^\d{2}:\d{2}$/).optional()
 });
 
+const ScheduleUpdateSchema = z.object({
+  amount: z.number().positive().optional(),
+  amountType: z.enum(["quantity", "usd"]).optional(),
+  intervalCount: z.number().int().positive().nullable().optional(),
+  intervalUnit: z.enum(["minute", "hour", "day"]).nullable().optional(),
+  nextRunAt: z.string().datetime().optional(),
+  scheduleKind: z.enum(["interval", "weekly"]).optional(),
+  side: z.enum(["BUY", "SELL"]).optional(),
+  status: z.enum(["active", "paused", "cancelled"]).optional(),
+  stopLoss: z.number().positive().nullable().optional(),
+  takeProfit: z.number().positive().nullable().optional(),
+  timezone: z.string().optional(),
+  weeklyDays: z.array(z.number().int().min(0).max(6)).nullable().optional(),
+  weeklyTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional()
+});
+
 const PairedWeeklyScheduleSchema = z.object({
   amount: z.number().positive(),
   amountType: z.enum(["quantity", "usd"]),
@@ -2093,6 +2109,29 @@ app.post("/api/schedules/paired-weekly", async (c) => {
   return c.json({ ok: true, data: result.data }, 201);
 });
 
+app.patch("/api/schedules/:id", async (c) => {
+  const parsed = ScheduleUpdateSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+  const input = parsed.data;
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.amount !== undefined) update.amount = input.amount;
+  if (input.amountType !== undefined) update.amount_type = input.amountType;
+  if (input.intervalCount !== undefined) update.interval_count = input.intervalCount;
+  if (input.intervalUnit !== undefined) update.interval_unit = input.intervalUnit;
+  if (input.nextRunAt !== undefined) update.next_run_at = input.nextRunAt;
+  if (input.scheduleKind !== undefined) update.schedule_kind = input.scheduleKind;
+  if (input.side !== undefined) update.side = input.side;
+  if (input.status !== undefined) update.status = input.status;
+  if (input.stopLoss !== undefined) update.stop_loss = input.stopLoss;
+  if (input.takeProfit !== undefined) update.take_profit = input.takeProfit;
+  if (input.timezone !== undefined) update.timezone = input.timezone;
+  if (input.weeklyDays !== undefined) update.weekly_days = input.weeklyDays;
+  if (input.weeklyTime !== undefined) update.weekly_time = input.weeklyTime;
+  const result = await requireSupabase().from("recurring_schedules").update(update).eq("id", c.req.param("id")).select().single();
+  if (result.error) return c.json({ ok: false, error: result.error.message }, 500);
+  return c.json({ ok: true, data: result.data });
+});
+
 app.patch("/api/schedules/:id/:action", async (c) => {
   const action = c.req.param("action");
   if (!["pause", "resume", "cancel"].includes(action)) return c.json({ ok: false, error: "invalid action" }, 400);
@@ -2140,6 +2179,7 @@ app.patch("/api/strategies/:id/:action", async (c) => {
 Bun.serve({
   hostname: "0.0.0.0",
   port,
+  idleTimeout: 60,
   fetch: app.fetch
 });
 

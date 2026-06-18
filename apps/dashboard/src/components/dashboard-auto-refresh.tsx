@@ -4,17 +4,17 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
-const refreshSeconds = Number(process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_SECONDS || 3);
+const refreshSeconds = Number(process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_SECONDS || 0);
 
 export default function DashboardAutoRefresh() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!Number.isFinite(refreshSeconds) || refreshSeconds <= 0) return;
-
-    const interval = window.setInterval(() => {
-      router.refresh();
-    }, refreshSeconds * 1000);
+    const interval = Number.isFinite(refreshSeconds) && refreshSeconds > 0
+      ? window.setInterval(() => {
+          router.refresh();
+        }, refreshSeconds * 1000)
+      : null;
 
     const client = getSupabaseBrowserClient();
     const channel = client
@@ -24,7 +24,7 @@ export default function DashboardAutoRefresh() {
       .subscribe();
 
     return () => {
-      window.clearInterval(interval);
+      if (interval) window.clearInterval(interval);
       if (client && channel) void client.removeChannel(channel);
     };
   }, [router]);

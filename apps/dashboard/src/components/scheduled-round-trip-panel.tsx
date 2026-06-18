@@ -6,8 +6,19 @@ import { operatorHeaders } from "@/lib/operator-api";
 type Broker = { id: "ibkr" | "simulated"; name: string };
 type Account = { accountId: string; displayName: string };
 type Instrument = { assetClass: string; currency: string; exchange: string; instrumentId: string; name: string; symbol: string; tradable?: boolean };
-type ScheduleRow = { id: string; side: "BUY" | "SELL"; status: string; symbol: string; weekly_days?: number[]; weekly_time?: string; next_run_at?: string };
+type ScheduleRow = {
+  amount?: number | string;
+  amount_type?: "quantity" | "usd";
+  id: string;
+  next_run_at?: string;
+  side: "BUY" | "SELL";
+  status: string;
+  symbol: string;
+  weekly_days?: number[];
+  weekly_time?: string;
+};
 type Status = "idle" | "loading" | "done" | "error";
+type ScheduleEdit = { amount: string; amountType: "quantity" | "usd"; nextRunAt: string };
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
 const days = [
@@ -19,6 +30,19 @@ const days = [
   ["Vie", 5],
   ["Sáb", 6]
 ] as const;
+
+function localDateTimeValue(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function nextMinuteValue() {
+  const date = new Date(Date.now() + 60_000);
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 async function api(path: string, init?: RequestInit) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -47,6 +71,7 @@ export default function ScheduledRoundTripPanel() {
   const [amountType, setAmountType] = useState<"quantity" | "usd">("quantity");
   const [amount, setAmount] = useState("1");
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
+  const [editing, setEditing] = useState<Record<string, ScheduleEdit>>({});
   const busy = status === "loading";
   const exitSide = entrySide === "BUY" ? "SELL" : "BUY";
   const ready = Boolean(accountId && instrument && selectedDays.length && entryTime !== exitTime && Number(amount) > 0);
@@ -156,6 +181,46 @@ export default function ScheduledRoundTripPanel() {
     }
   }
 
+  function startEdit(row: ScheduleRow) {
+    setEditing((current) => ({
+      ...current,
+      [row.id]: {
+        amount: String(row.amount ?? "1"),
+        amountType: row.amount_type ?? "quantity",
+        nextRunAt: localDateTimeValue(row.next_run_at) || nextMinuteValue()
+      }
+    }));
+  }
+
+  async function saveSchedule(id: string) {
+    const draft = editing[id];
+    if (!draft || busy || Number(draft.amount) <= 0 || !draft.nextRunAt) return;
+    setStatus("loading");
+    setMessage("Guardando recurrencia...");
+    try {
+      const row = await api(`/api/schedules/${encodeURIComponent(id)}`, {
+        body: JSON.stringify({
+          amount: Number(draft.amount),
+          amountType: draft.amountType,
+          nextRunAt: new Date(draft.nextRunAt).toISOString(),
+          status: "active"
+        }),
+        method: "PATCH"
+      }) as ScheduleRow;
+      setStatus("done");
+      setMessage(`${row.symbol} ${row.side} actualizada`);
+      setEditing((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      await loadBase();
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "No se pudo guardar recurrencia");
+    }
+  }
+
   return (
     <section className="rounded-md border border-cyan-400/20 bg-[#07111f] p-4">
       <div className="mb-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -240,7 +305,48 @@ export default function ScheduledRoundTripPanel() {
                 <span className="font-semibold text-slate-200">{row.symbol} · {row.side} · {row.weekly_time ?? "-"}</span>
                 <span className="text-slate-500">{row.status} · próxima {String(row.next_run_at ?? "-").slice(0, 16)}</span>
               </div>
+              <p className="mt-1 text-slate-500">{row.amount_type === "usd" ? "USD" : "Cantidad"} · {String(row.amount ?? "-")}</p>
+              {editing[row.id] ? (
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <label className="block">
+                    <span className="mb-1 block text-slate-400">Tipo de monto</span>
+                    <select
+                      value={editing[row.id].amountType}
+                      onChange={(event) => setEditing((current) => ({ ...current, [row.id]: { ...current[row.id], amountType: event.target.value as "quantity" | "usd" } }))}
+                      className="h-9 w-full rounded border border-sky-400/15 bg-slate-950/80 px-2"
+                    >
+                      <option value="quantity">Cantidad</option>
+                      <option value="usd">Monto USD</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-slate-400">Monto</span>
+                    <input
+                      type="number"
+                      min="0.01"
+                      value={editing[row.id].amount}
+                      onChange={(event) => setEditing((current) => ({ ...current, [row.id]: { ...current[row.id], amount: event.target.value } }))}
+                      className="h-9 w-full rounded border border-sky-400/15 bg-slate-950/80 px-2"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-slate-400">Próxima ejecución</span>
+                    <input
+                      type="datetime-local"
+                      value={editing[row.id].nextRunAt}
+                      onChange={(event) => setEditing((current) => ({ ...current, [row.id]: { ...current[row.id], nextRunAt: event.target.value } }))}
+                      className="h-9 w-full rounded border border-sky-400/15 bg-slate-950/80 px-2"
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-2 sm:col-span-3">
+                    <button type="button" disabled={busy || Number(editing[row.id].amount) <= 0 || !editing[row.id].nextRunAt} onClick={() => saveSchedule(row.id)} className="rounded border border-emerald-400/30 px-2 py-1 font-semibold text-emerald-100 disabled:opacity-30">Guardar y activar</button>
+                    <button type="button" disabled={busy} onClick={() => setEditing((current) => ({ ...current, [row.id]: { ...current[row.id], nextRunAt: nextMinuteValue() } }))} className="rounded border border-cyan-400/25 px-2 py-1 text-cyan-100 disabled:opacity-30">Reintentar en 1 min</button>
+                    <button type="button" disabled={busy} onClick={() => setEditing((current) => { const next = { ...current }; delete next[row.id]; return next; })} className="rounded border border-sky-400/15 px-2 py-1 disabled:opacity-30">Cerrar edición</button>
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" disabled={busy || row.status === "cancelled"} onClick={() => startEdit(row)} className="rounded border border-cyan-400/20 px-2 py-1 disabled:opacity-30">Editar</button>
                 <button type="button" disabled={row.status !== "active" || busy} onClick={() => manageSchedule(row.id, "pause")} className="rounded border border-amber-400/20 px-2 py-1 disabled:opacity-30">Pausar</button>
                 <button type="button" disabled={row.status !== "paused" || busy} onClick={() => manageSchedule(row.id, "resume")} className="rounded border border-emerald-400/20 px-2 py-1 disabled:opacity-30">Reanudar</button>
                 <button type="button" disabled={row.status === "cancelled" || busy} onClick={() => manageSchedule(row.id, "cancel")} className="rounded border border-rose-400/20 px-2 py-1 disabled:opacity-30">Cancelar</button>
